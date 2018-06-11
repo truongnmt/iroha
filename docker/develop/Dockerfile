@@ -258,7 +258,7 @@ RUN set -e; \
 
 # python bindings dependencies
 RUN set -e; \
-    pip install grpcio_tools; \
+    pip install grpcio_tools Jinja2; \
     pip3 install grpcio_tools
 
 # install lcov
