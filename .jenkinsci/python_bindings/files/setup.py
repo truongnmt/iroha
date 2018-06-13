@@ -14,7 +14,7 @@ setup(name='iroha',
       license='Apache-2.0',
       packages=find_packages(exclude=['dist','build','*.pyc', '.DS_Store', '.vscode', '__pycache__']),
       package_data={
-            'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so']
+            'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
       },
       classifiers=[
             'License :: OSI Approved :: Apache Software License',
@@ -25,8 +25,8 @@ setup(name='iroha',
             'Programming Language :: Python :: 3.6'
       ],
       install_requires=[
-            'protobuf=>3.5.2.post1',
-            'grpcio=>1.12.1'
+            'protobuf>=3.5.2.post1',
+            'grpcio>=1.12.1'
       ],    
       project_urls={
         "Jenkins": "https://jenkins.soramitsu.co.jp/",

@@ -101,7 +101,7 @@ def doPythonBindings(os, buildType=Release) {
   else {
     sh "cp $artifactsPath /tmp/bindings-artifact"
   }
-  doPythonWheels();
+  doPythonWheels(os);
   return artifactsPath
 }
 
@@ -132,22 +132,21 @@ def doAndroidBindings(abiVersion) {
   return artifactsPath
 }
 
-def doPythonWheels() {
+def doPythonWheels(os) {
   def envs = "py3.6"
   if (env.PBVersion == "python2") { envs = "py2.7" }
-  if (os == "windows") {
-    def wheelPath="wheels"
-    sh """
-      mkdir -p $wheelPath/iroha; \
-      cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null; \
-      cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha; \
-      cp .jenkinsci/python_bindings/files/setup.py $wheelPath; \
-      cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
-      source activate $envs; \
-      pip wheel --no-deps $wheelPath/; \
-      source deactivate;
-    """
-  }
+  // if (os == "windows") {
+  def wheelPath="wheels"
+  sh """
+    mkdir -p $wheelPath/iroha; \
+    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
+    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha; \
+    cp .jenkinsci/python_bindings/files/setup.py $wheelPath; \
+    cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
+    source activate $envs; \
+    pip wheel --no-deps $wheelPath/; \
+    source deactivate;
+  """
   withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
     sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-dev/ *.whl"
   }
