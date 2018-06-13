@@ -144,7 +144,7 @@ def doPythonWheels() {
       cp .jenkinsci/python_bindings/files/setup.py $wheelPath; \
       cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
       source activate $envs; \
-      pip wheel --no-deps $wheelPath/ \;
+      pip wheel --no-deps $wheelPath/; \
       source deactivate;
     """
   }
