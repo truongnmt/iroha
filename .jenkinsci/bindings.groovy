@@ -133,40 +133,23 @@ def doAndroidBindings(abiVersion) {
 }
 
 def doPythonWheels() {
-  def envs = "py3.5"
-
+  def envs = "py3.6"
   if (env.PBVersion == "python2") { envs = "py2.7" }
   if (os == "windows") {
-    def wheelPath = "/tmp/${env.GIT_COMMIT}/bindings-artifact-python"
-    sh "mkdir -p $wheelPath/iroha"
+    def wheelPath="wheels"
     sh """
+      mkdir -p $wheelPath/iroha; \
       cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null; \
       cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha; \
       cp .jenkinsci/python_bindings/files/setup.py $wheelPath; \
-      cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath;
-      """
-
-    sh """
-    BASEPATH=\$PATH; \
-    PATH=/c/Users/Administrator/anaconda64/Scripts:\$BASEPATH; \
-    source activate $envs; \
-
-    python .jenkinsci/python_bindings/build_templates.py
-    ANACONDA_BASE=/c/Users/Administrator/anaconda; \
-    ANACONDA_BASE64=/c/Users/Administrator/anaconda64; \
-
-    PYENV=envs/$envs; \
-
-    PATH=\$ANACONDA_BASE/$envs;\$ANACONDA_BASE64/$envs/Scripts;\$BASEPATH; \
-    pip install wheel -q; \
-    pip wheel --no-deps $wheelPath; \
-
-    PATH=\$BASEPATH;
+      cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
+      source activate $envs; \
+      pip wheel --no-deps $wheelPath/ \;
+      source deactivate;
     """
-    // sh "set PATH=C:\Users\Administrator\anaconda64\Scripts;%PATH%"
   }
-  withCredentials([file(credentialsId: 'ci_pypi_username', variable: 'CI_PYPI_USERNAME'), string(credentialsId: 'ci_pypi_password', variable: 'CI_PYPI_PASSWORD')]) {
-    sh "twine upload --skip-existing -u $CI_PYPI_USERNAME -p $CI_PYPI_PASSWORD --repository-url https://test.pypi.org/legacy/ *.whl"
+  withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
+    sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-dev/ *.whl"
   }
 }
 return this
