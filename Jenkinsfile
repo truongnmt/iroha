@@ -531,8 +531,10 @@ pipeline {
               }
             }
             cleanup {
-              def clean = load ".jenkinsci/linux-post-step.groovy"
-              clean.cleanUp()
+              script {
+                def clean = load ".jenkinsci/linux-post-step.groovy"
+                clean.cleanUp()
+              }
             }
           }
         }
