@@ -16,7 +16,7 @@ def doDockerNetworkCleanup() {
 
 // cleanup docker images which weren't used for more that 20 days and image for this PR in case of successful PR
 def doStaleDockerImagesCleanup() {
-  sh "find ${JENKINS_DOCKER_IMAGE_DIR} -type f -mtime +20 -exec rm -f {}"
+  sh "find ${JENKINS_DOCKER_IMAGE_DIR} -type f -mtime +20 -exec rm -f {} \\;"
   sh "rm -f ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
 }
 

@@ -24,9 +24,9 @@ def cleanUp() {
       #remove folder with iroha.deb package and Dockerfiles
       rm -rf /tmp/${env.GIT_COMMIT}-${BUILD_NUMBER}
       rm -rf /tmp/${env.GIT_COMMIT}
-      cleanWs()
     """
   }
+  cleanWs()
 }
 
 // stop postgres and remove workspace folder (for mac)
@@ -34,6 +34,7 @@ def macCleanUp() {
   sh """
     rm -rf /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/
   """
+  cleanWs()
 }
 
 return this

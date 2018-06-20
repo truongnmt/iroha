@@ -467,30 +467,22 @@ pipeline {
             }
           }
           post {
-            always {
-              timeout(time: 600, unit: "SECONDS") {
-                script {
-                  try {
-                    if (currentBuild.currentResult == "SUCCESS") {
-                      def artifacts = load ".jenkinsci/artifacts.groovy"
-                      def commit = env.GIT_COMMIT
-                      if (params.JavaBindings) {
-                        javaBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/java-bindings-*.zip' ]
-                        artifacts.uploadArtifacts(javaBindingsFilePaths, '/iroha/bindings/java')
-                      }
-                      if (params.PythonBindings) {
-                        pythonBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/python-bindings-*.zip' ]
-                        artifacts.uploadArtifacts(pythonBindingsFilePaths, '/iroha/bindings/python')
-                      }
-                      if (params.AndroidBindings) {
-                        androidBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/android-bindings-*.zip' ]
-                        artifacts.uploadArtifacts(androidBindingsFilePaths, '/iroha/bindings/android')
-                      }
-                    }
+            success {
+              script {
+                if (currentBuild.currentResult == "SUCCESS") {
+                  def artifacts = load ".jenkinsci/artifacts.groovy"
+                  def commit = env.GIT_COMMIT
+                  if (params.JavaBindings) {
+                    javaBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/java-bindings-*.zip' ]
+                    artifacts.uploadArtifacts(javaBindingsFilePaths, '/iroha/bindings/java')
                   }
-                  finally {
-                    def clean = load ".jenkinsci/post-step.groovy"
-                    clean.cleanUp()
+                  if (params.PythonBindings) {
+                    pythonBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/python-bindings-*.zip' ]
+                    artifacts.uploadArtifacts(pythonBindingsFilePaths, '/iroha/bindings/python')
+                  }
+                  if (params.AndroidBindings) {
+                    androidBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/android-bindings-*.zip' ]
+                    artifacts.uploadArtifacts(androidBindingsFilePaths, '/iroha/bindings/android')
                   }
                 }
               }
@@ -528,12 +520,6 @@ pipeline {
                   pythonBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/python-bindings-*.zip' ]
                   artifacts.uploadArtifacts(pythonBindingsFilePaths, '/iroha/bindings/python')
                 }
-              }
-            }
-            cleanup {
-              script {
-                def clean = load ".jenkinsci/post-step.groovy"
-                clean.cleanUp()
               }
             }
           }
@@ -585,6 +571,11 @@ pipeline {
         if (params.x86_64_macos || params.merge_pr) {
           node ('mac') {
             post.macCleanUp()
+          }
+        }
+        if (params.x86_64_win || params.merge_pr) {
+          node ('win') {
+            post.cleanUp()
           }
         }
       }
