@@ -73,7 +73,6 @@ namespace shared_model {
       };
 
       Role permissionFor(Grantable);
-      std::string grantableToString(Grantable grantable);
       // TODO(@l4l) 19/06/18: Remove with IR-1452
       Grantable permissionOf(Role);
 

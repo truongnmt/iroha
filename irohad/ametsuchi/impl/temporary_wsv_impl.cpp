@@ -51,12 +51,12 @@ namespace iroha {
         // Temporary variant: going to be a chain of results in future pull
         // requests
         auto validation_result =
-            boost::apply_visitor(*command_validator_, command.get());
-        validation_result.match([](expected::Value<void> &) { return true; },
-                                [this](expected::Error<CommandError> &e) {
-                                  log_->error(e.error.toString());
-                                  return false;
-                                });
+            boost::apply_visitor(*command_validator_, command.get())
+                .match([](expected::Value<void> &) { return true; },
+                       [this](expected::Error<CommandError> &e) {
+                         log_->error(e.error.toString());
+                         return false;
+                       });
         if (not validation_result) {
           return false;
         }
