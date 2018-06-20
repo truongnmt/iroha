@@ -9,7 +9,7 @@
 #include <bitset>
 #include <functional>
 #include <initializer_list>
-#include <string>
+#include <vector>
 
 namespace shared_model {
   namespace interface {
@@ -97,11 +97,8 @@ namespace shared_model {
       PermissionSet();
       PermissionSet(std::initializer_list<Perm> list);
 
-      std::string toBitstring() const;
-
-      static size_t size();
+      size_t size() const;
       PermissionSet &reset();
-      PermissionSet &set();
       PermissionSet &set(Perm p);
       PermissionSet &unset(Perm p);
 
