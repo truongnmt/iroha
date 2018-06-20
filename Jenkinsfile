@@ -82,10 +82,10 @@ pipeline {
             script {
               def debugBuild = load ".jenkinsci/debug-build.groovy"
               def coverage = load ".jenkinsci/build-coverage.groovy"
-              if (params.BUILD_TYPE == 'Debug') {
+              if (params.build_type == 'Debug') {
                 debugBuild.doDebugBuild(coverage.checkCoverageConditions())
               }
-              if (params.BUILD_TYPE == 'Release') {
+              if (params.build_type == 'Release') {
                 def releaseBuild = load ".jenkinsci/release-build.groovy"
                 releaseBuild.doReleaseBuild()
               }
@@ -94,7 +94,7 @@ pipeline {
           post {
             success {
               script {
-                if (params.BUILD_TYPE == 'Release') {
+                if (params.build_type == 'Release') {
                   def post = load ".jenkinsci/linux-post-step.groovy"
                   post.postStep()
                 }
@@ -113,7 +113,7 @@ pipeline {
           agent { label 'armv7' }
           steps {
             script {
-              if (params.BUILD_TYPE == 'Debug') {
+              if (params.build_type == 'Debug') {
                 def debugBuild = load ".jenkinsci/debug-build.groovy"
                 debugBuild.doDebugBuild()
               }
@@ -126,7 +126,7 @@ pipeline {
           post {
             success {
               script {
-                if (params.BUILD_TYPE == 'Release') {
+                if (params.build_type == 'Release') {
                   def post = load ".jenkinsci/linux-post-step.groovy"
                   post.postStep()
                 }
@@ -145,7 +145,7 @@ pipeline {
           agent { label 'armv8' }
           steps {
             script {
-              if ( params.BUILD_TYPE == 'Debug') {
+              if ( params.build_type == 'Debug') {
                 def debugBuild = load ".jenkinsci/debug-build.groovy"
                 debugBuild.doDebugBuild()
               }
@@ -158,7 +158,7 @@ pipeline {
           post {
             success {
               script {
-                if (params.BUILD_TYPE == 'Release') {
+                if (params.build_type == 'Release') {
                   def post = load ".jenkinsci/linux-post-step.groovy"
                   post.postStep()
                 }
@@ -166,7 +166,7 @@ pipeline {
             }
           }
         }
-        stage('MacOS') {
+        stage('x86_64_macos') {
           when {
             beforeAgent true
             anyOf {
@@ -178,7 +178,7 @@ pipeline {
           agent { label 'mac' }
           steps {
             script {
-              if (params.BUILD_TYPE == 'Debug') {
+              if (params.build_type == 'Debug') {
                 def macDebugBuild = load ".jenkinsci/mac-debug-build.groovy"
                 macDebugBuild.doDebugBuild()
               }
@@ -191,7 +191,7 @@ pipeline {
           post {
             success {
               script {
-                if (params.BUILD_TYPE == 'Release') {
+                if (params.build_type == 'Release') {
                   def post = load ".jenkinsci/linux-post-step.groovy"
                   post.macPostStep()
                 }
@@ -208,7 +208,7 @@ pipeline {
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
           allOf {
-            expression { return params.BUILD_TYPE == 'Debug' }
+            expression { return params.build_type == 'Debug' }
             expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
           }
         }
@@ -224,7 +224,7 @@ pipeline {
     stage('Tests') {
       when {
         beforeAgent true
-        expression { return params.BUILD_TYPE == "Debug" }
+        expression { return params.build_type == "Debug" }
       }
       parallel {
         stage('x86_64_linux') {
@@ -337,7 +337,7 @@ pipeline {
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
           allOf {
-            expression { return params.BUILD_TYPE == 'Debug' }
+            expression { return params.build_type == 'Debug' }
             expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
           }
         }
@@ -371,7 +371,7 @@ pipeline {
             anyOf {
               allOf {
                 expression { return params.x86_64_linux }
-                expression { return params.BUILD_TYPE == 'Debug' }
+                expression { return params.build_type == 'Debug' }
                 expression { return env.GIT_LOCAL_BRANCH ==~ /(develop|master|trunk)/ }
               }
               expression { return MERGE_CONDITIONS_SATISFIED == "true" }
@@ -387,7 +387,7 @@ pipeline {
           post {
             success {
               script {
-                if (params.BUILD_TYPE == 'Release') {
+                if (params.build_type == 'Release') {
                   def post = load ".jenkinsci/linux-post-step.groovy"
                   post.postStep()
                 }
