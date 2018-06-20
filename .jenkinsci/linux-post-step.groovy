@@ -24,6 +24,7 @@ def cleanUp() {
       #remove folder with iroha.deb package and Dockerfiles
       rm -rf /tmp/${env.GIT_COMMIT}-${BUILD_NUMBER}
       rm -rf /tmp/${env.GIT_COMMIT}
+      cleanWs()
     """
   }
 }

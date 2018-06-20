@@ -489,8 +489,8 @@ pipeline {
                     }
                   }
                   finally {
-                    sh "rm -rf /tmp/${env.GIT_COMMIT}"
-                    // cleanWs()
+                    def clean = load ".jenkinsci/linux-post-step.groovy"
+                    clean.cleanUp()
                   }
                 }
               }
@@ -531,8 +531,8 @@ pipeline {
               }
             }
             cleanup {
-              sh "rm -rf /tmp/${env.GIT_COMMIT}"
-              cleanWs()
+              def clean = load ".jenkinsci/linux-post-step.groovy"
+              clean.cleanUp()
             }
           }
         }

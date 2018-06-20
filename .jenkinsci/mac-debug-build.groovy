@@ -1,10 +1,6 @@
 def doDebugBuild() {
   def setter = load ".jenkinsci/set-parallelism.groovy"
   def parallelism = setter.setParallelism(params.PARALLELISM)
-  def cmakeOptions = ""
-  if ( coverageEnabled ) {
-    cmakeOptions = " -DCOVERAGE=ON "
-  }
   def scmVars = checkout scm
   env.IROHA_VERSION = "0x${scmVars.GIT_COMMIT}"
   env.IROHA_HOME = "/opt/iroha"
