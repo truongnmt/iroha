@@ -95,7 +95,7 @@ pipeline {
             success {
               script {
                 if (params.build_type == 'Release') {
-                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  def post = load ".jenkinsci/post-step.groovy"
                   post.postStep()
                 }
               }
@@ -127,7 +127,7 @@ pipeline {
             success {
               script {
                 if (params.build_type == 'Release') {
-                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  def post = load ".jenkinsci/post-step.groovy"
                   post.postStep()
                 }
               }
@@ -159,7 +159,7 @@ pipeline {
             success {
               script {
                 if (params.build_type == 'Release') {
-                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  def post = load ".jenkinsci/post-step.groovy"
                   post.postStep()
                 }
               }
@@ -192,7 +192,7 @@ pipeline {
             success {
               script {
                 if (params.build_type == 'Release') {
-                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  def post = load ".jenkinsci/post-step.groovy"
                   post.macPostStep()
                 }
               }
@@ -388,7 +388,7 @@ pipeline {
             success {
               script {
                 if (params.build_type == 'Release') {
-                  def post = load ".jenkinsci/linux-post-step.groovy"
+                  def post = load ".jenkinsci/post-step.groovy"
                   post.postStep()
                 }
               }
@@ -489,7 +489,7 @@ pipeline {
                     }
                   }
                   finally {
-                    def clean = load ".jenkinsci/linux-post-step.groovy"
+                    def clean = load ".jenkinsci/post-step.groovy"
                     clean.cleanUp()
                   }
                 }
@@ -532,7 +532,7 @@ pipeline {
             }
             cleanup {
               script {
-                def clean = load ".jenkinsci/linux-post-step.groovy"
+                def clean = load ".jenkinsci/post-step.groovy"
                 clean.cleanUp()
               }
             }
@@ -560,7 +560,7 @@ pipeline {
     }
     cleanup {
       script {
-        def post = load ".jenkinsci/linux-post-step.groovy"
+        def post = load ".jenkinsci/post-step.groovy"
         def clean = load ".jenkinsci/docker-cleanup.groovy"
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
