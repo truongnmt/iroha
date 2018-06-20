@@ -47,17 +47,7 @@ namespace iroha {
       command_validator_->setCreatorAccountId(tx_creator);
       auto execute_command = [this, &tx_creator](auto &command) {
         auto account = wsv_->getAccount(tx_creator).value();
-
-        // Temporary variant: going to be a chain of results in future pull
-        // requests
-        auto validation_result =
-            boost::apply_visitor(*command_validator_, command.get())
-                .match([](expected::Value<void> &) { return true; },
-                       [this](expected::Error<CommandError> &e) {
-                         log_->error(e.error.toString());
-                         return false;
-                       });
-        if (not validation_result) {
+        if (not boost::apply_visitor(*command_validator_, command.get())) {
           return false;
         }
         auto execution_result =

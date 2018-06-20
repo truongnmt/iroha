@@ -96,7 +96,6 @@ namespace shared_model {
      public:
       PermissionSet();
       PermissionSet(std::initializer_list<Perm> list);
-      explicit PermissionSet(const std::string &bitstring);
 
       std::string toBitstring() const;
 
