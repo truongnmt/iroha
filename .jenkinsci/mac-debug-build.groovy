@@ -1,3 +1,5 @@
+#!/usr/bin/env groovy
+
 def doDebugBuild() {
   def setter = load ".jenkinsci/set-parallelism.groovy"
   def parallelism = setter.setParallelism(params.PARALLELISM)

@@ -203,6 +203,7 @@ pipeline {
     }
     stage('Pre-Coverage') {
       when {
+        beforeAgent true
         anyOf {
           expression { params.coverage }  // by request
           expression { return INITIAL_COMMIT_PR == "true" }

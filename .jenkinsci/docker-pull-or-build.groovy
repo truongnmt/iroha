@@ -64,6 +64,7 @@ def dockerPullOrUpdate(imageName, currentDockerfileURL, previousDockerfileURL, r
     else {
       // now we get reference image from the file (pull from dockerhub)
       iC = docker.image("${DOCKER_REGISTRY_BASENAME}:${imageName}")
+      DOCKER_IMAGE_FILE = imageName
     }
   }
   if (GIT_LOCAL_BRANCH ==~ /develop|master/) {
