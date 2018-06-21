@@ -511,7 +511,8 @@ namespace iroha {
             creator_account_id, queries, Role::kAddAssetQty)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have kAddAssetQty",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kAddAssetQty),
           command_name);
     }
     return {};
@@ -526,7 +527,8 @@ namespace iroha {
             creator_account_id, queries, Role::kAddPeer)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have kAddPeer",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kAddPeer),
           command_name);
     }
     return {};
@@ -546,40 +548,38 @@ namespace iroha {
       return checkAccountRolePermission(
           creator_account_id, queries, Role::kAddSignatory);
     };
-    auto creator_has_grantable_permission =
-        shared_model::detail::makeLazyInitializer(
-            [&creator_account_id, &command, &queries]() {
-              return queries.hasAccountGrantablePermission(
-                  creator_account_id,
-                  command.accountId(),
-                  Grantable::kAddMySignatory);
-            });
+    auto creator_has_grantable_permission = [&creator_account_id,
+                                             &command,
+                                             &queries]() {
+      return queries.hasAccountGrantablePermission(
+          creator_account_id, command.accountId(), Grantable::kAddMySignatory);
+    };
 
     if (creator_adds_signatory_to_his_account()) {
       if (creator_has_permission_on_own()) {
         // 1. Creator adds signatory to his account, and he has permission for
         // it
         return {};
-      } else if (*creator_has_grantable_permission) {
+      } else if (creator_has_grantable_permission()) {
         // 2. Creator adds signatory to his account, and he has grantable
         // permission for it
         return {};
       } else {
         return makeCommandError(
             "has permission command validation failed: account "
-                + creator_account_id
-                + " does not have permission kAddSignatory for his own account",
+                + creator_account_id + " does not have permission "
+                + toString(Role::kAddSignatory) + " for his own account",
             command_name);
       }
-    } else if (*creator_has_grantable_permission) {
+    } else if (creator_has_grantable_permission()) {
       // 3. Creator adds signatory to another account, and he has grantable
       // permission for it
       return {};
     } else {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id
-              + " does not have permission kAddSignatory for account "
+              + creator_account_id + " does not have permission "
+              + toString(Role::kAddSignatory) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -594,7 +594,8 @@ namespace iroha {
             creator_account_id, queries, Role::kAppendRole)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kAppendRole",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kAppendRole),
           command_name);
     }
     return {};
@@ -609,7 +610,8 @@ namespace iroha {
             creator_account_id, queries, Role::kCreateAccount)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kCreateAccount",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kCreateAccount),
           command_name);
     }
     return {};
@@ -624,7 +626,8 @@ namespace iroha {
             creator_account_id, queries, Role::kCreateAsset)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kCreateAsset",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kCreateAsset),
           command_name);
     }
     return {};
@@ -639,7 +642,8 @@ namespace iroha {
             creator_account_id, queries, Role::kCreateDomain)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kCreateDomain",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kCreateDomain),
           command_name);
     }
     return {};
@@ -654,7 +658,8 @@ namespace iroha {
             creator_account_id, queries, Role::kCreateRole)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kCreateRole",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kCreateRole),
           command_name);
     }
     return {};
@@ -669,7 +674,8 @@ namespace iroha {
             creator_account_id, queries, Role::kDetachRole)) {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id + " does not have permission kDetachRole",
+              + creator_account_id + " does not have permission "
+              + toString(Role::kDetachRole),
           command_name);
     }
     return {};
@@ -709,38 +715,38 @@ namespace iroha {
           creator_account_id, queries, Role::kRemoveSignatory);
     };
     auto creator_has_grantable_permission =
-        shared_model::detail::makeLazyInitializer(
-            [&creator_account_id, &command, &queries]() {
-              return queries.hasAccountGrantablePermission(
-                  creator_account_id,
-                  command.accountId(),
-                  Grantable::kRemoveMySignatory);
-            });
+        [&creator_account_id, &command, &queries]() {
+          return queries.hasAccountGrantablePermission(
+              creator_account_id,
+              command.accountId(),
+              Grantable::kRemoveMySignatory);
+        };
 
     if (creator_removes_signatory_from_his_account()) {
       if (creator_has_permission_on_own()) {
         // 1. Creator removes signatory from his account, and he has permission
         // for it
         return {};
-      } else if (*creator_has_grantable_permission) {
+      } else if (creator_has_grantable_permission()) {
         // 2. Creator removes signatory from his account, and he has grantable
         // permission for it
         return {};
       } else {
-        return makeCommandError("has permission command validation failed: account "
-                                    + creator_account_id
-                                    + " does not have permission kRemoveMySignatory for his own account",
-                                command_name);
+        return makeCommandError(
+            "has permission command validation failed: account "
+                + creator_account_id + " does not have permission "
+                + toString(Role::kRemoveMySignatory) + " for his own account",
+            command_name);
       }
-    } else if (*creator_has_grantable_permission) {
+    } else if (creator_has_grantable_permission()) {
       // 3. Creator removes signatory from another account, and he has grantable
       // permission for it
       return {};
     } else {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id
-              + " does not have permission kRemoveMySignatory for account "
+              + creator_account_id + " does not have permission "
+              + toString(Role::kRemoveSignatory) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -783,12 +789,13 @@ namespace iroha {
       return {};
     }
 
-    return makeCommandError(
-        "has permission command validation failed: account "
-            + creator_account_id + " tries to set details for account "
-            + command.accountId()
-            + ", but has neither kSetDetail nor grantable kSetMyAccountDetail",
-        command_name);
+    return makeCommandError("has permission command validation failed: account "
+                                + creator_account_id
+                                + " tries to set details for account "
+                                + command.accountId() + ", but has neither "
+                                + toString(Role::kSetDetail) + " nor grantable "
+                                + toString(Role::kSetMyAccountDetail),
+                            command_name);
   }
 
   CommandResult CommandValidator::hasPermissions(
@@ -806,35 +813,33 @@ namespace iroha {
           creator_account_id, queries, Role::kSetQuorum);
     };
     auto creator_has_grantable_permission =
-        shared_model::detail::makeLazyInitializer([&creator_account_id,
-                                                   &command,
-                                                   &queries]() {
+        [&creator_account_id, &command, &queries]() {
           return queries.hasAccountGrantablePermission(
               creator_account_id, command.accountId(), Grantable::kSetMyQuorum);
-        });
+        };
 
     if (creator_sets_quorum_for_his_account()) {
       if (creator_has_permission_on_own()) {
         // 1. Creator has permission quorum for his account
         return {};
-      } else if (*creator_has_grantable_permission) {
+      } else if (creator_has_grantable_permission()) {
         // 2. Creator has grantable permission for his account
         return {};
       } else {
         return makeCommandError(
             "has permission command validation failed: account "
-                + creator_account_id
-                + " does not have permission kSetQuorum for his own account",
+                + creator_account_id + " does not have permission "
+                + toString(Role::kSetQuorum) + " for his own account",
             command_name);
       }
-    } else if (*creator_has_grantable_permission) {
+    } else if (creator_has_grantable_permission()) {
       // 3. Creator has grantable permission for another account
       return {};
     } else {
       return makeCommandError(
           "has permission command validation failed: account "
-              + creator_account_id
-              + " does not have permission kSetMyQuorum for account "
+              + creator_account_id + " does not have permission "
+              + toString(Role::kSetMyQuorum) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -850,10 +855,11 @@ namespace iroha {
               creator_account_id, queries, Role::kSubtractAssetQty)) {
         return {};
       } else {
-        return makeCommandError("has permission command validation failed: account "
-                                    + creator_account_id
-                                    + " does not have permission kSubtractAssetQty for his own account",
-                                command_name);
+        return makeCommandError(
+            "has permission command validation failed: account "
+                + creator_account_id + " does not have permission "
+                + toString(Role::kSubtractAssetQty) + " for his own account",
+            command_name);
       }
     } else {
       return makeCommandError(
@@ -899,8 +905,8 @@ namespace iroha {
         } else {
           return makeCommandError(
               "has permission command validation failed: account "
-                  + creator_account_id
-                  + " does not have kTransferMyAssets for account "
+                  + creator_account_id + " does not have "
+                  + toString(Role::kTransferMyAssets) + " for account "
                   + command.srcAccountId(),
               command_name);
         }
@@ -911,8 +917,8 @@ namespace iroha {
         } else {
           return makeCommandError(
               "has permission command validation failed: account "
-                  + creator_account_id
-                  + " does not have kTransfer for his own account",
+                  + creator_account_id + " does not have "
+                  + toString(Role::kTransfer) + " for his own account",
               command_name);
         }
       }
@@ -920,7 +926,8 @@ namespace iroha {
       // For both cases, dest_account must have can_receive
       return makeCommandError(
           "has permission command validation failed: destination account "
-              + command.destAccountId() + " does not have kReceive",
+              + command.destAccountId() + " does not have "
+              + toString(Role::kReceive),
           command_name);
     }
   }
