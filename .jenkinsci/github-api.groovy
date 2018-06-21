@@ -88,7 +88,7 @@ def getPullRequestReviewers() {
 	def reviewPaging = sh(script: """curl -I https://api.github.com/repos/hyperledger/iroha/pulls/1392/reviews | grep -E "^Link:" | wc -l""", returnStdout: true)
 	def reviewPagesCount = "1"
 	if (reviewPaging.toInteger()) {
-		reviewPagesCount = sh(script: """ curl -I https://api.github.com/repos/hyperledger/iroha/pulls/1392/reviews | grep -E "^Link:" | awk 'BEGIN { FS = "page" } { print $NF }' | awk -F"=" '{print $2}' | awk -F">" '{print $1}' """, returnStdout: true)
+		reviewPagesCount = sh(script: """ curl -I https://api.github.com/repos/hyperledger/iroha/pulls/1392/reviews | grep -E "^Link:" | awk 'BEGIN { FS = "page" } { print \$NF }' | awk -F"=" '{print \$2}' | awk -F">" '{print \$1}' """, returnStdout: true)
 	}
 	// start the loop to request pages sequentially
 	for(pageID in (1..reviewPagesCount.toInteger())) {
