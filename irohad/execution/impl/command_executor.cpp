@@ -579,7 +579,7 @@ namespace iroha {
       return makeCommandError(
           "has permission command validation failed: account "
               + creator_account_id + " does not have permission "
-              + toString(Role::kAddSignatory) + " for account "
+              + toString(Grantable::kAddMySignatory) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -735,7 +735,7 @@ namespace iroha {
         return makeCommandError(
             "has permission command validation failed: account "
                 + creator_account_id + " does not have permission "
-                + toString(Role::kRemoveMySignatory) + " for his own account",
+                + toString(Role::kRemoveSignatory) + " for his own account",
             command_name);
       }
     } else if (creator_has_grantable_permission()) {
@@ -746,7 +746,7 @@ namespace iroha {
       return makeCommandError(
           "has permission command validation failed: account "
               + creator_account_id + " does not have permission "
-              + toString(Role::kRemoveSignatory) + " for account "
+              + toString(Grantable::kRemoveMySignatory) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -794,7 +794,7 @@ namespace iroha {
                                 + " tries to set details for account "
                                 + command.accountId() + ", but has neither "
                                 + toString(Role::kSetDetail) + " nor grantable "
-                                + toString(Role::kSetMyAccountDetail),
+                                + toString(Grantable::kSetMyAccountDetail),
                             command_name);
   }
 
@@ -839,7 +839,7 @@ namespace iroha {
       return makeCommandError(
           "has permission command validation failed: account "
               + creator_account_id + " does not have permission "
-              + toString(Role::kSetMyQuorum) + " for account "
+              + toString(Grantable::kSetMyQuorum) + " for account "
               + command.accountId(),
           command_name);
     }
@@ -906,7 +906,7 @@ namespace iroha {
           return makeCommandError(
               "has permission command validation failed: account "
                   + creator_account_id + " does not have "
-                  + toString(Role::kTransferMyAssets) + " for account "
+                  + toString(Grantable::kTransferMyAssets) + " for account "
                   + command.srcAccountId(),
               command_name);
         }
