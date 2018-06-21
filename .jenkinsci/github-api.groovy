@@ -51,10 +51,10 @@ def checkMergeAcceptance() {
 	// fill the map of user:review_status
   getPullRequestReviewers()
   pullRequestReviewers.each{ user, review_status -> 
-  	if (v == GithubPRStatus.APPROVED.toString()) {
+  	if (review_status == GithubPRStatus.APPROVED.toString()) {
   		approvalsRequired -= 1
   	}
-  	else if (v == GithubPRStatus.CHANGES_REQUESTED.toString()) {
+  	else if (review_status == GithubPRStatus.CHANGES_REQUESTED.toString()) {
   		return false
   	}
   }
