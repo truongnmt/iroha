@@ -121,7 +121,7 @@ def getPullRequestReviewers() {
 def getUsersMentionList() {
 	getPullRequestReviewers()
 	def ghUsersList = ''
-	pullRequestReviewers.each{ user, review_status -> ghUsersList = [['@', user].join(), ghUsersList].join(' ') }
+	pullRequestReviewers.each{ user, review_status -> ghUsersList = ["@${user}", ghUsersList].join(' ') }
 	return ghUsersList
 }
 
