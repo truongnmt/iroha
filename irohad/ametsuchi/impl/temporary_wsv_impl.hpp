@@ -20,6 +20,7 @@
 
 #include <pqxx/connection>
 #include <pqxx/nontransaction>
+#include <soci/soci.h>
 
 #include "ametsuchi/temporary_wsv.hpp"
 #include "execution/command_executor.hpp"
@@ -31,7 +32,8 @@ namespace iroha {
     class TemporaryWsvImpl : public TemporaryWsv {
      public:
       TemporaryWsvImpl(std::unique_ptr<pqxx::lazyconnection> connection,
-                       std::unique_ptr<pqxx::nontransaction> transaction);
+                       std::unique_ptr<pqxx::nontransaction> transaction,
+                       std::unique_ptr<soci::session> sql);
 
       bool apply(
           const shared_model::interface::Transaction &,
@@ -41,6 +43,7 @@ namespace iroha {
       ~TemporaryWsvImpl() override;
 
      private:
+      std::unique_ptr<soci::session> sql_;
       std::unique_ptr<pqxx::lazyconnection> connection_;
       std::unique_ptr<pqxx::nontransaction> transaction_;
       std::unique_ptr<WsvQuery> wsv_;

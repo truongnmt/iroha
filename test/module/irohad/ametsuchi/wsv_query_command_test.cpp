@@ -57,7 +57,14 @@ namespace iroha {
         wsv_transaction =
             std::make_unique<pqxx::nontransaction>(*postgres_connection);
 
-        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction);
+        auto pool = std::make_shared<soci::connection_pool>(10);
+
+        for (size_t i = 0; i != 10; i++) {
+          soci::session &session = pool->at(i);
+          session.open(soci::postgresql, pgopt_);
+        }
+
+        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction, pool);
         query = std::make_unique<PostgresWsvQuery>(*wsv_transaction);
 
         wsv_transaction->exec(init_);
@@ -104,6 +111,11 @@ namespace iroha {
       ASSERT_EQ(0, roles->size());
     }
 
+    TEST_F(RoleTest, InsertTwoRole) {
+      ASSERT_TRUE(val(command->insertRole("role")));
+      ASSERT_TRUE(val(command->insertRole("role")));
+    }
+
     class RolePermissionsTest : public WsvQueryCommandTest {
       void SetUp() override {
         WsvQueryCommandTest::SetUp();
@@ -121,7 +133,7 @@ namespace iroha {
 
       auto permissions = query->getRolePermissions(role);
       ASSERT_TRUE(permissions);
-      ASSERT_EQ(role_permissions, permissions);
+      ASSERT_EQ(role_permissions, permissions.get());
     }
 
     /**
@@ -468,7 +480,14 @@ namespace iroha {
         wsv_transaction =
             std::make_unique<pqxx::nontransaction>(*postgres_connection);
 
-        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction);
+        auto pool = std::make_shared<soci::connection_pool>(10);
+
+        for (size_t i = 0; i != 10; i++) {
+          soci::session &session = pool->at(i);
+          session.open(soci::postgresql, pgopt_);
+        }
+
+        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction, pool);
         query = std::make_unique<PostgresWsvQuery>(*wsv_transaction);
       }
     };

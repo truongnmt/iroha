@@ -22,6 +22,10 @@
 #include <pqxx/nontransaction>
 #include <pqxx/result>
 
+#define SOCI_USE_BOOST
+#include <soci/postgresql/soci-postgresql.h>
+#include <soci/soci.h>
+
 #include "builders/default_builders.hpp"
 #include "common/result.hpp"
 #include "logger/logger.hpp"
@@ -39,6 +43,7 @@ namespace iroha {
     inline auto makeExecuteResult(pqxx::nontransaction &transaction) noexcept {
       return [&](const std::string &statement) noexcept
           ->expected::Result<pqxx::result, std::string> {
+        std::cout << statement << std::endl;
         try {
           return expected::makeValue(transaction.exec(statement));
         } catch (const std::exception &e) {
@@ -60,6 +65,7 @@ namespace iroha {
                                     logger::Logger &logger) noexcept {
       return [&](const std::string &statement) noexcept
           ->boost::optional<pqxx::result> {
+        std::cout << statement << std::endl;
         try {
           return transaction.exec(statement);
         } catch (const std::exception &e) {

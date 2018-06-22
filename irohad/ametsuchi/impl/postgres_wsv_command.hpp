@@ -27,7 +27,7 @@ namespace iroha {
 
     class PostgresWsvCommand : public WsvCommand {
      public:
-      explicit PostgresWsvCommand(pqxx::nontransaction &transaction);
+      explicit PostgresWsvCommand(pqxx::nontransaction &transaction, soci::session &sql);
       WsvCommandResult insertRole(
           const shared_model::interface::types::RoleIdType &role_name) override;
 
@@ -86,6 +86,7 @@ namespace iroha {
           shared_model::interface::permissions::Grantable permission) override;
 
      private:
+      soci::session &sql_;
       pqxx::nontransaction &transaction_;
 
       using ExecuteType = decltype(makeExecuteResult(transaction_));

@@ -39,10 +39,12 @@ namespace iroha {
 
     StorageImpl::StorageImpl(std::string block_store_dir,
                              PostgresOptions postgres_options,
-                             std::unique_ptr<KeyValueStorage> block_store)
+                             std::unique_ptr<KeyValueStorage> block_store,
+                             std::shared_ptr<soci::connection_pool> connection)
         : block_store_dir_(std::move(block_store_dir)),
           postgres_options_(std::move(postgres_options)),
           block_store_(std::move(block_store)),
+          connection_(connection),
           log_(logger::log("StorageImpl")) {}
 
     expected::Result<std::unique_ptr<TemporaryWsv>, std::string>
@@ -60,7 +62,9 @@ namespace iroha {
 
       return expected::makeValue<std::unique_ptr<TemporaryWsv>>(
           std::make_unique<TemporaryWsvImpl>(std::move(postgres_connection),
-                                             std::move(wsv_transaction)));
+                                             std::move(wsv_transaction),
+                                             std::move(std::make_unique<soci::session>(*connection_))
+          ));
     }
 
     expected::Result<std::unique_ptr<MutableStorage>, std::string>
@@ -84,11 +88,15 @@ namespace iroha {
           .as_blocking()
           .subscribe([&top_hash](auto block) { top_hash = block->hash(); });
 
+      auto sql = std::make_unique<soci::session>(soci::postgresql, postgres_options_.optionsString());
+
       return expected::makeValue<std::unique_ptr<MutableStorage>>(
           std::make_unique<MutableStorageImpl>(
               top_hash.value_or(shared_model::interface::types::HashType("")),
               std::move(postgres_connection),
-              std::move(wsv_transaction)));
+              std::move(wsv_transaction),
+              std::move(sql)
+          ));
     }
 
     bool StorageImpl::insertBlock(const shared_model::interface::Block &block) {
@@ -215,6 +223,19 @@ DROP TABLE IF EXISTS index_by_id_height_asset;
       return expected::makeValue(ConnectionContext(std::move(*block_store)));
     }
 
+    expected::Result<std::shared_ptr<soci::connection_pool>,
+                            std::string>
+    StorageImpl::initPostgresConnection(std::string &options_str, size_t pool_size) {
+      auto pool = std::make_shared<soci::connection_pool>(pool_size);
+
+      for (size_t i = 0; i != pool_size; i++) {
+        soci::session &session = pool->at(i);
+        session.open(soci::postgresql, options_str);
+        std::cout << options_str << std::endl;
+      }
+      return expected::makeValue(pool);
+    };
+
     expected::Result<std::shared_ptr<StorageImpl>, std::string>
     StorageImpl::create(std::string block_store_dir,
                         std::string postgres_options) {
@@ -236,13 +257,20 @@ DROP TABLE IF EXISTS index_by_id_height_asset;
       }
 
       auto ctx_result = initConnections(block_store_dir);
+      auto db_result = initPostgresConnection(postgres_options);
       expected::Result<std::shared_ptr<StorageImpl>, std::string> storage;
       ctx_result.match(
           [&](expected::Value<ConnectionContext> &ctx) {
+            db_result.match([&](expected::Value<std::shared_ptr<soci::connection_pool>> &connection) {
             storage = expected::makeValue(std::shared_ptr<StorageImpl>(
                 new StorageImpl(block_store_dir,
                                 options,
-                                std::move(ctx.value.block_store))));
+                                std::move(ctx.value.block_store),
+                                connection.value
+                )));
+            },
+            [&](expected::Error<std::string> &error) { storage = error; }
+            );
           },
           [&](expected::Error<std::string> &error) { storage = error; });
       return storage;
@@ -260,6 +288,8 @@ DROP TABLE IF EXISTS index_by_id_height_asset;
                     block.second))));
       }
 
+//      *(storage->sql_) << "COMMIT";
+      storage->sql_->commit();
       storage->transaction_->exec("COMMIT;");
       storage->committed = true;
     }
@@ -277,7 +307,8 @@ DROP TABLE IF EXISTS index_by_id_height_asset;
           std::make_unique<pqxx::nontransaction>(*postgres_connection);
 
       return std::make_shared<PostgresWsvQuery>(std::move(postgres_connection),
-                                                std::move(wsv_transaction));
+                                                std::move(wsv_transaction),
+                                                std::move(std::make_unique<soci::session>(*connection_)));
     }
 
     std::shared_ptr<BlockQuery> StorageImpl::getBlockQuery() const {

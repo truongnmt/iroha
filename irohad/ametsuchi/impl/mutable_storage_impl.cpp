@@ -30,19 +30,23 @@ namespace iroha {
     MutableStorageImpl::MutableStorageImpl(
         shared_model::interface::types::HashType top_hash,
         std::unique_ptr<pqxx::lazyconnection> connection,
-        std::unique_ptr<pqxx::nontransaction> transaction)
-        : top_hash_(top_hash),
+        std::unique_ptr<pqxx::nontransaction> transaction,
+        std::unique_ptr<soci::session> sql)
+        : sql_(std::move(sql)),
+          top_hash_(top_hash),
           connection_(std::move(connection)),
           transaction_(std::move(transaction)),
-          wsv_(std::make_unique<PostgresWsvQuery>(*transaction_)),
-          executor_(std::make_unique<PostgresWsvCommand>(*transaction_)),
+          wsv_(std::make_unique<PostgresWsvQuery>(*transaction_, *sql_)),
+          executor_(std::make_unique<PostgresWsvCommand>(*transaction_, *sql_)),
           block_index_(std::make_unique<PostgresBlockIndex>(*transaction_)),
           committed(false),
           log_(logger::log("MutableStorage")) {
-      auto query = std::make_shared<PostgresWsvQuery>(*transaction_);
-      auto command = std::make_shared<PostgresWsvCommand>(*transaction_);
+      auto query = std::make_shared<PostgresWsvQuery>(*transaction_, *sql_);
+      auto command = std::make_shared<PostgresWsvCommand>(*transaction_, *sql_);
       command_executor_ =
           std::make_shared<CommandExecutor>(CommandExecutor(query, command));
+//      *sql_ << "BEGIN";
+      sql_->begin();
       transaction_->exec("BEGIN;");
     }
 
@@ -67,7 +71,8 @@ namespace iroha {
                            execute_command);
       };
 
-      transaction_->exec("SAVEPOINT savepoint_;");
+//      transaction_->exec("SAVEPOINT savepoint_;");
+      *sql_ << "SAVEPOINT savepoint2_";
       auto result = function(block, *wsv_, top_hash_)
           and std::all_of(block.transactions().begin(),
                           block.transactions().end(),
@@ -78,16 +83,19 @@ namespace iroha {
         block_index_->index(block);
 
         top_hash_ = block.hash();
-        transaction_->exec("RELEASE SAVEPOINT savepoint_;");
+//        transaction_->exec("RELEASE SAVEPOINT savepoint_;");
+        *sql_ << "RELEASE SAVEPOINT savepoint2_";
       } else {
-        transaction_->exec("ROLLBACK TO SAVEPOINT savepoint_;");
+//        transaction_->exec("ROLLBACK TO SAVEPOINT savepoint_;");
+        *sql_ << "ROLLBACK TO SAVEPOINT savepoint2_";
       }
       return result;
     }
 
     MutableStorageImpl::~MutableStorageImpl() {
       if (not committed) {
-        transaction_->exec("ROLLBACK;");
+//        transaction_->exec("ROLLBACK;");
+        *sql_ << "ROLLBACK";
       }
     }
   }  // namespace ametsuchi

@@ -28,9 +28,12 @@ namespace iroha {
   namespace ametsuchi {
     class PostgresWsvQuery : public WsvQuery {
      public:
-      explicit PostgresWsvQuery(pqxx::nontransaction &transaction);
+      explicit PostgresWsvQuery(pqxx::nontransaction &transaction,
+                                soci::session &sql);
       PostgresWsvQuery(std::unique_ptr<pqxx::lazyconnection> connection,
-                       std::unique_ptr<pqxx::nontransaction> transaction);
+                       std::unique_ptr<pqxx::nontransaction> transaction,
+                       std::unique_ptr<soci::session> sql_ptr);
+
       boost::optional<std::vector<shared_model::interface::types::RoleIdType>>
       getAccountRoles(const shared_model::interface::types::AccountIdType
                           &account_id) override;
@@ -73,6 +76,8 @@ namespace iroha {
           shared_model::interface::permissions::Grantable permission) override;
 
      private:
+      std::unique_ptr<soci::session> sql_ptr_;
+      soci::session &sql_;
       std::unique_ptr<pqxx::lazyconnection> connection_ptr_;
       std::unique_ptr<pqxx::nontransaction> transaction_ptr_;
 

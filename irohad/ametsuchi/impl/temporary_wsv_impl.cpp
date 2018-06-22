@@ -25,17 +25,20 @@ namespace iroha {
   namespace ametsuchi {
     TemporaryWsvImpl::TemporaryWsvImpl(
         std::unique_ptr<pqxx::lazyconnection> connection,
-        std::unique_ptr<pqxx::nontransaction> transaction)
-        : connection_(std::move(connection)),
+        std::unique_ptr<pqxx::nontransaction> transaction,
+        std::unique_ptr<soci::session> sql)
+        : sql_(std::move(sql)),
+          connection_(std::move(connection)),
           transaction_(std::move(transaction)),
-          wsv_(std::make_unique<PostgresWsvQuery>(*transaction_)),
-          executor_(std::make_unique<PostgresWsvCommand>(*transaction_)),
+          wsv_(std::make_unique<PostgresWsvQuery>(*transaction_, *sql_)),
+          executor_(std::make_unique<PostgresWsvCommand>(*transaction_, *sql_)),
           log_(logger::log("TemporaryWSV")) {
-      auto query = std::make_shared<PostgresWsvQuery>(*transaction_);
-      auto command = std::make_shared<PostgresWsvCommand>(*transaction_);
+      auto query = std::make_shared<PostgresWsvQuery>(*transaction_, *sql_);
+      auto command = std::make_shared<PostgresWsvCommand>(*transaction_, *sql_);
       command_executor_ = std::make_shared<CommandExecutor>(query, command);
       command_validator_ = std::make_shared<CommandValidator>(query);
       transaction_->exec("BEGIN;");
+      *sql_ << "BEGIN";
     }
 
     bool TemporaryWsvImpl::apply(
@@ -59,20 +62,24 @@ namespace iroha {
       };
 
       transaction_->exec("SAVEPOINT savepoint_;");
+      *sql_ << "SAVEPOINT savepoint2_";
       auto result =
           apply_function(tx, *wsv_)
           and std::all_of(
                   tx.commands().begin(), tx.commands().end(), execute_command);
       if (result) {
         transaction_->exec("RELEASE SAVEPOINT savepoint_;");
+        *sql_ << "RELEASE SAVEPOINT savepoint2_";
       } else {
         transaction_->exec("ROLLBACK TO SAVEPOINT savepoint_;");
+        *sql_ << "ROLLBACK TO SAVEPOINT savepoint2_";
       }
       return result;
     }
 
     TemporaryWsvImpl::~TemporaryWsvImpl() {
       transaction_->exec("ROLLBACK;");
+      *sql_ << "ROLLBACK";
     }
   }  // namespace ametsuchi
 }  // namespace iroha

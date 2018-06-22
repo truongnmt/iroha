@@ -20,41 +20,62 @@
 #include <boost/format.hpp>
 #include "backend/protobuf/permissions.hpp"
 
+#define COMMA ,
+#define EXECUTE(sql, message)            \
+  try {                                  \
+    sql;                                 \
+  } catch (const std::exception &e) {    \
+    return expected::makeError(message); \
+  }
+
+
+
 namespace iroha {
   namespace ametsuchi {
 
-    PostgresWsvCommand::PostgresWsvCommand(pqxx::nontransaction &transaction)
+    PostgresWsvCommand::PostgresWsvCommand(pqxx::nontransaction &transaction,
+                                           soci::session &sql)
         : transaction_(transaction),
+          sql_(sql),
           execute_{makeExecuteResult(transaction_)} {}
 
     WsvCommandResult PostgresWsvCommand::insertRole(
         const shared_model::interface::types::RoleIdType &role_name) {
-      auto result = execute_("INSERT INTO role(role_id) VALUES ("
-                             + transaction_.quote(role_name) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert role: '%s'") % role_name).str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+      std::cout << "insertRole(" << role_name << ")" << std::endl;
+      try {
+        sql_ << "INSERT INTO role(role_id) VALUES (:role_id)",
+            soci::use(role_name);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert role: '%s', reason: %s")
+             % role_name % e.what())
+                .str());
+      }
+      //      EXECUTE("INSERT INTO role(role_id) VALUES (:role_id)" COMMA
+      //      soci::use(role_name), (boost::format("failed to insert role: '%s',
+      //      reason: %s") % role_name % e.what()).str()); int count; sql_ <<
+      //      "SELECT count(*) FROM role", soci::into(count); return {};
+      //      };
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccountRole(
         const shared_model::interface::types::AccountIdType &account_id,
         const shared_model::interface::types::RoleIdType &role_name) {
-      auto result =
-          execute_("INSERT INTO account_has_roles(account_id, role_id) VALUES ("
-                   + transaction_.quote(account_id) + ", "
-                   + transaction_.quote(role_name) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert account role, account: '%s', "
-                              "role name: '%s'")
-                % account_id % role_name)
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+      std::cout << "insertAccountRole(" << account_id << ", " << role_name
+                << ")" << std::endl;
+      try {
+        sql_ << "INSERT INTO account_has_roles(account_id, role_id) VALUES "
+                "(:account_id, :role_id)",
+            soci::use(account_id), soci::use(role_name);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert account role, account: '%s', "
+                           "role name: '%s'")
+             % account_id % role_name)
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::deleteAccountRole(
@@ -96,19 +117,37 @@ namespace iroha {
         }
         return s;
       };
+      std::cout << "insertRolePermissions(" << role_id << ")" << std::endl;
+      try {
+        std::string params = generate_perm_string(entry);
+        std::string query =
+            "INSERT INTO role_has_permissions(role_id, permission) VALUES ";
+        query += generate_perm_string(entry);
+        sql_ << query;
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert role permissions, role "
+                           "id: '%s', %s, permissions: [%s]")
+             % role_id % e.what()
+             % generate_perm_string([](auto a) { return a; }))
+                .str());
+      }
 
-      auto result = execute_(
-          "INSERT INTO role_has_permissions(role_id, permission) VALUES "
-          + generate_perm_string(entry) + ";");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert role permissions, role "
-                              "id: '%s', permissions: [%s]")
-                % role_id % generate_perm_string([](auto a) { return a; }))
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+      //      auto result = execute_(
+      //          "INSERT INTO role_has_permissions(role_id, permission) VALUES
+      //          "
+      //          + generate_perm_string(entry) + ";");
+      //
+      //      auto message_gen = [&] {
+      //        return (boost::format("failed to insert role permissions, role "
+      //                              "id: '%s', permissions: [%s]")
+      //                % role_id % generate_perm_string([](auto a) { return a;
+      //                }))
+      //            .str();
+      //      };
+      //
+      //      return makeCommandResult(std::move(result), message_gen);
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccountGrantablePermission(
@@ -310,6 +349,21 @@ namespace iroha {
 
     WsvCommandResult PostgresWsvCommand::insertPeer(
         const shared_model::interface::Peer &peer) {
+      std::cout << "insertPeer(" << peer.toString() << ")" << std::endl;
+      try {
+        sql_ << "INSERT INTO peer(public_key, address) VALUES (:pk, :address)",
+            soci::use(peer.pubkey().hex()), soci::use(peer.address());
+        int size;
+        sql_ << "SELECT count(*) FROM peer", soci::into(size);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                 "failed to insert peer, public key: '%s', address: '%s'")
+             % peer.pubkey().hex() % peer.address())
+                .str());
+      }
+
       auto result =
           execute_("INSERT INTO peer(public_key, address) VALUES ("
                    + transaction_.quote(pqxx::binarystring(
@@ -343,6 +397,20 @@ namespace iroha {
 
     WsvCommandResult PostgresWsvCommand::insertDomain(
         const shared_model::interface::Domain &domain) {
+      std::cout << "insertDomain(" << domain.toString() << ")" << std::endl;
+      try {
+        sql_ << "INSERT INTO domain(domain_id, default_role) VALUES (:id, "
+                ":role)",
+            soci::use(domain.domainId()), soci::use(domain.defaultRole());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert domain, domain id: '%s', "
+                           "default role: '%s'")
+             % domain.domainId() % domain.defaultRole())
+                .str());
+      }
+
       auto result =
           execute_("INSERT INTO domain(domain_id, default_role) VALUES ("
                    + transaction_.quote(domain.domainId()) + ", "

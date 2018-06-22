@@ -36,17 +36,21 @@ namespace iroha {
     const std::string kAccountId = "account_id";
     const std::string kDomainId = "domain_id";
 
-    PostgresWsvQuery::PostgresWsvQuery(pqxx::nontransaction &transaction)
+    PostgresWsvQuery::PostgresWsvQuery(pqxx::nontransaction &transaction, soci::session &sql)
         : transaction_(transaction),
+          sql_(sql),
           log_(logger::log("PostgresWsvQuery")),
           execute_{makeExecuteOptional(transaction_, log_)} {}
 
     PostgresWsvQuery::PostgresWsvQuery(
         std::unique_ptr<pqxx::lazyconnection> connection,
-        std::unique_ptr<pqxx::nontransaction> transaction)
+        std::unique_ptr<pqxx::nontransaction> transaction,
+        std::unique_ptr<soci::session> sql_ptr)
         : connection_ptr_(std::move(connection)),
           transaction_ptr_(std::move(transaction)),
           transaction_(*transaction_ptr_),
+          sql_ptr_(std::move(sql_ptr)),
+          sql_(*sql_ptr_),
           log_(logger::log("PostgresWsvQuery")),
           execute_{makeExecuteOptional(transaction_, log_)} {}
 
@@ -214,6 +218,23 @@ namespace iroha {
 
     boost::optional<std::shared_ptr<shared_model::interface::Domain>>
     PostgresWsvQuery::getDomain(const DomainIdType &domain_id) {
+      boost::optional<std::string> role;
+      sql_ << "SELECT default_role FROM domain WHERE domain_id = :id LIMIT 1", soci::into(role), soci::use(domain_id);
+
+      if (not role) {
+        return boost::none;
+      }
+
+      auto result = tryBuild([&] {
+        return shared_model::builder::DefaultDomainBuilder()
+            .domainId(domain_id)
+            .defaultRole(role.get())
+            .build();
+      });
+
+      return fromResult(result);
+
+
       return execute_("SELECT * FROM domain WHERE domain_id = "
                       + transaction_.quote(domain_id) + ";")
                  | [&](const auto &result)
@@ -230,24 +251,38 @@ namespace iroha {
     boost::optional<std::vector<std::shared_ptr<shared_model::interface::Peer>>>
     PostgresWsvQuery::getPeers() {
       pqxx::result result;
-      return execute_("SELECT * FROM peer;") | [&](const auto &result)
-                 -> boost::optional<std::vector<
-                     std::shared_ptr<shared_model::interface::Peer>>> {
-        auto results = transform<shared_model::builder::BuilderResult<
-            shared_model::interface::Peer>>(result, makePeer);
-        std::vector<std::shared_ptr<shared_model::interface::Peer>> peers;
-        for (auto &r : results) {
-          r.match(
-              [&](expected::Value<
-                  std::shared_ptr<shared_model::interface::Peer>> &v) {
-                peers.push_back(v.value);
-              },
-              [&](expected::Error<std::shared_ptr<std::string>> &e) {
-                log_->info(*e.error);
-              });
-        }
-        return peers;
-      };
+//      return execute_("SELECT * FROM peer;") | [&](const auto &result)
+//                 -> boost::optional<std::vector<
+//      std::shared_ptr<shared_model::interface::Peer>>> {
+//        auto results = transform<shared_model::builder::BuilderResult<
+//            shared_model::interface::Peer>>(result, makePeer);
+//        std::vector<std::shared_ptr<shared_model::interface::Peer>> peers;
+//        for (auto &r : results) {
+//          r.match(
+//              [&](expected::Value<
+//                  std::shared_ptr<shared_model::interface::Peer>> &v) {
+//                peers.push_back(v.value);
+//              },
+//              [&](expected::Error<std::shared_ptr<std::string>> &e) {
+//                log_->info(*e.error);
+//              });
+//        }
+//        return peers;
+//      };
+
+      int size;
+
+      sql_ << "SELECT count(*) FROM peer", soci::into(size);
+
+      std::vector<std::string> pks(size), addresses(size);
+
+      sql_ << "SELECT public_key, address FROM peer", soci::into(pks), soci::into(addresses);
+
+      for (int i = 0; i < pks.size(); i++) {
+        std::cout << "peer: " << pks[0] << ", " << addresses[0] << std::endl;
+      }
+
+      return boost::none;
     }
   }  // namespace ametsuchi
 }  // namespace iroha

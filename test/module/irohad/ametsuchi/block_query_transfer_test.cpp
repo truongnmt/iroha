@@ -46,6 +46,13 @@ namespace iroha {
         transaction = std::make_unique<pqxx::nontransaction>(
             *postgres_connection, "Postgres block indexes");
 
+        auto pool = std::make_shared<soci::connection_pool>(10);
+
+        for (size_t i = 0; i != 10; i++) {
+          soci::session &session = pool->at(i);
+          session.open(soci::postgresql, pgopt_);
+        }
+
         index = std::make_shared<PostgresBlockIndex>(*transaction);
         blocks = std::make_shared<PostgresBlockQuery>(*transaction, *file);
 
