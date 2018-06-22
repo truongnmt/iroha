@@ -100,7 +100,7 @@ namespace iroha {
             notifier_.get_subscriber().on_next(
                 validated_proposal_and_errors.first);
             for (const auto &transaction: validated_proposal_and_errors.second) {
-              for (const auto &command_error: transaction) {
+              for (const auto &command_error: transaction.first) {
                 log_->error(command_error);
               }
             }
