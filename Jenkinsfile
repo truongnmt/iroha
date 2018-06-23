@@ -214,11 +214,15 @@ pipeline {
           }
           agent { label 'x86_64_aws_cov'}
           steps {
-            script {
+            timeout(120) {
               waitUntil {
-                def mutex = sh(script: "[[ -f build/Makefile ]]", returnStatus: true)
-                return mutex == 0 ? true : false
+                script {
+                  def mutex = sh(script: "[[ -f build/Makefile ]]", returnStatus: true)
+                  return mutex == 0
+                }
               }
+            }
+            script {
               def coverage = load '.jenkinsci/debug-build.groovy'
               coverage.doPreCoverageStep()
             }
