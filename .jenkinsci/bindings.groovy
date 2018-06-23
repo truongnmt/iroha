@@ -101,7 +101,7 @@ def doPythonBindings(os, buildType=Release) {
   else {
     sh "cp $artifactsPath /tmp/bindings-artifact"
   }
-  doPythonWheels(os);
+  doPythonWheels(os, buildType);
   return artifactsPath
 }
 
@@ -132,16 +132,17 @@ def doAndroidBindings(abiVersion) {
   return artifactsPath
 }
 
-def doPythonWheels(os) {
-  def envs = "py3.6"
+def doPythonWheels(os, buildType) {
+  def envs = "py3.5"
+  // def version = "0.0.1-" + (script: 'date "+%Y%m%d"', returnStdout: true).trim()
+  def version = env.BUILD_TAG
   if (env.PBVersion == "python2") { envs = "py2.7" }
-  // if (os == "windows") {
   def wheelPath="wheels"
   sh """
     mkdir -p $wheelPath/iroha; \
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha; \
-    cp .jenkinsci/python_bindings/files/setup.py $wheelPath; \
+    jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
+    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
     cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
     source activate $envs; \
     pip wheel --no-deps $wheelPath/; \
