@@ -4,7 +4,7 @@ properties([parameters([
   booleanParam(defaultValue: false, description: '', name: 'armv8_linux'),
   booleanParam(defaultValue: false, description: '', name: 'x86_64_macos'),
   booleanParam(defaultValue: false, description: '', name: 'x86_64_win'),
-  booleanParam(defaultValue: false, description: 'Build coverage', name: 'coverage'),
+  booleanParam(defaultValue: true, description: 'Build coverage', name: 'coverage'),
   booleanParam(defaultValue: false, description: 'Merge this PR to target after success build', name: 'merge_pr'),
   booleanParam(defaultValue: false, description: 'Scheduled nightly build', name: 'nightly'),
   choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'build_type'),
@@ -199,26 +199,30 @@ pipeline {
             }
           }
         }
-      }
-    }
-    stage('Pre-Coverage') {
-      when {
-        beforeAgent true
-        anyOf {
-          expression { params.coverage }  // by request
-          expression { return INITIAL_COMMIT_PR == "true" }
-          expression { return MERGE_CONDITIONS_SATISFIED == "true" }
-          allOf {
-            expression { return params.build_type == 'Debug' }
-            expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
+        stage('Pre-Coverage') {
+          when {
+            beforeAgent true
+            anyOf {
+              expression { params.coverage }  // by request
+              expression { return INITIAL_COMMIT_PR == "true" }
+              expression { return MERGE_CONDITIONS_SATISFIED == "true" }
+              allOf {
+                expression { return params.build_type == 'Debug' }
+                expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
+              }
+            }
           }
-        }
-      }
-      agent { label 'x86_64_aws_cov'}
-      steps {
-        script {
-          def coverage = load '.jenkinsci/debug-build.groovy'
-          coverage.doPreCoverageStep()
+          agent { label 'x86_64_aws_cov'}
+          steps {
+            script {
+              waitUntil {
+                def mutex = sh(script: "[[ -f build/Makefile ]]", returnStatus: true)
+                return mutex == 0 ? true : false
+              }
+              def coverage = load '.jenkinsci/debug-build.groovy'
+              coverage.doPreCoverageStep()
+            }
+          }
         }
       }
     }
