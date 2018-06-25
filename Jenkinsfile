@@ -212,12 +212,11 @@ pipeline {
               }
             }
           }
+          options { 
+            skipDefaultCheckout true
+          }
           agent { label 'x86_64_aws_cov'}
           steps {
-            script {
-              checkout scm
-              sh "rm .git/index.lock"
-            }
             timeout(120) {
               waitUntil {
                 script {
