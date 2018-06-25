@@ -68,7 +68,7 @@ def doDebugBuild(coverageEnabled=false) {
             -DIROHA_VERSION=${env.IROHA_VERSION} \
             ${cmakeOptions}
         """
-        // sh "cmake --build build -- -j${parallelism}"
+        sh "cmake --build build -- -j${parallelism}"
         sh "ccache --show-stats"
      }
 }
