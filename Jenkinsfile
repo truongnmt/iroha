@@ -214,6 +214,9 @@ pipeline {
           }
           agent { label 'x86_64_aws_cov'}
           steps {
+            script {
+              checkout scm
+            }
             timeout(120) {
               waitUntil {
                 script {
