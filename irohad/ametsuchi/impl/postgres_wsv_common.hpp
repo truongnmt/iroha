@@ -97,6 +97,32 @@ namespace iroha {
       return values;
     }
 
+    template <typename T, typename Operator>
+    std::vector<T> transform(const soci::rowset<soci::row> &result,
+                             Operator &&transform_func) noexcept {
+      std::vector<T> values;
+      //      values.reserve(result.size());
+      std::transform(result.begin(),
+                     result.end(),
+                     std::back_inserter(values),
+                     transform_func);
+
+      return values;
+    }
+
+    template <typename T, typename Operator>
+    std::vector<T> transform(const std::vector<soci::row> &result,
+                             Operator &&transform_func) noexcept {
+      std::vector<T> values;
+      //      values.reserve(result.size());
+      std::transform(result.begin(),
+                     result.end(),
+                     std::back_inserter(values),
+                     transform_func);
+
+      return values;
+    }
+
     /**
      * Execute build function and return error in case it throws
      * @tparam T - result value type
@@ -114,41 +140,58 @@ namespace iroha {
 
     static inline shared_model::builder::BuilderResult<
         shared_model::interface::Account>
-    makeAccount(const pqxx::row &row) noexcept {
-      return tryBuild([&row] {
+    makeAccount(const std::string &account_id,
+                const std::string &domain_id,
+                const shared_model::interface::types::QuorumType &quorum,
+                const std::string &data) noexcept {
+      return tryBuild([&] {
         return shared_model::builder::DefaultAccountBuilder()
-            .accountId(row.at("account_id").template as<std::string>())
-            .domainId(row.at("domain_id").template as<std::string>())
-            .quorum(
-                row.at("quorum")
-                    .template as<shared_model::interface::types::QuorumType>())
-            .jsonData(row.at("data").template as<std::string>())
+            .accountId(account_id)
+            .domainId(domain_id)
+            .quorum(quorum)
+            .jsonData(data)
             .build();
       });
     }
 
     static inline shared_model::builder::BuilderResult<
         shared_model::interface::Asset>
-    makeAsset(const pqxx::row &row) noexcept {
-      return tryBuild([&row] {
+    makeAsset(const std::string &asset_id, const std::string &domain_id, const int32_t precision) noexcept {
+      return tryBuild([&] {
         return shared_model::builder::DefaultAssetBuilder()
-            .assetId(row.at("asset_id").template as<std::string>())
-            .domainId(row.at("domain_id").template as<std::string>())
-            .precision(row.at("precision").template as<int32_t>())
+            .assetId(asset_id)
+            .domainId(domain_id)
+            .precision(precision)
             .build();
       });
     }
 
     static inline shared_model::builder::BuilderResult<
         shared_model::interface::AccountAsset>
-    makeAccountAsset(const pqxx::row &row) noexcept {
+    makeAccountAsset(const soci::row &row) noexcept {
       return tryBuild([&row] {
         auto balance = shared_model::builder::DefaultAmountBuilder::fromString(
-            row.at("amount").template as<std::string>());
+            row.get<std::string>(2));
         return balance | [&](const auto &balance_ptr) {
           return shared_model::builder::DefaultAccountAssetBuilder()
-              .accountId(row.at("account_id").template as<std::string>())
-              .assetId(row.at("asset_id").template as<std::string>())
+              .accountId(row.get<std::string>(0))
+              .assetId(row.get<std::string>(1))
+              .balance(*balance_ptr)
+              .build();
+        };
+      });
+    }
+
+    static inline shared_model::builder::BuilderResult<
+        shared_model::interface::AccountAsset>
+    makeAccountAsset(const std::string &account_id, const std::string &asset_id, const std::string &amount) noexcept {
+      return tryBuild([&] {
+        auto balance = shared_model::builder::DefaultAmountBuilder::fromString(
+            amount);
+        return balance | [&](const auto &balance_ptr) {
+          return shared_model::builder::DefaultAccountAssetBuilder()
+              .accountId(account_id)
+              .assetId(asset_id)
               .balance(*balance_ptr)
               .build();
         };
@@ -157,24 +200,24 @@ namespace iroha {
 
     static inline shared_model::builder::BuilderResult<
         shared_model::interface::Peer>
-    makePeer(const pqxx::row &row) noexcept {
+    makePeer(const soci::row &row) noexcept {
       return tryBuild([&row] {
-        pqxx::binarystring public_key_str(row.at("public_key"));
-        shared_model::interface::types::PubkeyType pubkey(public_key_str.str());
         return shared_model::builder::DefaultPeerBuilder()
-            .pubkey(pubkey)
-            .address(row.at("address").template as<std::string>())
+            .pubkey(shared_model::crypto::PublicKey(
+                shared_model::crypto::Blob::fromHexString(
+                    row.get<std::string>(0))))
+            .address(row.get<std::string>(1))
             .build();
       });
     }
 
     static inline shared_model::builder::BuilderResult<
         shared_model::interface::Domain>
-    makeDomain(const pqxx::row &row) noexcept {
-      return tryBuild([&row] {
+    makeDomain(const std::string &domain_id, const std::string &role) noexcept {
+      return tryBuild([&domain_id, &role] {
         return shared_model::builder::DefaultDomainBuilder()
-            .domainId(row.at("domain_id").template as<std::string>())
-            .defaultRole(row.at("default_role").template as<std::string>())
+            .domainId(domain_id)
+            .defaultRole(role)
             .build();
       });
     }
@@ -195,9 +238,7 @@ namespace iroha {
             return boost::make_optional(v.value);
           },
           [](const expected::Error<std::shared_ptr<std::string>> &e)
-              -> boost::optional<std::shared_ptr<T>> {
-            return boost::none;
-          });
+              -> boost::optional<std::shared_ptr<T>> { return boost::none; });
     }
   }  // namespace ametsuchi
 }  // namespace iroha

@@ -31,9 +31,7 @@ namespace iroha {
   namespace ametsuchi {
     class TemporaryWsvImpl : public TemporaryWsv {
      public:
-      TemporaryWsvImpl(std::unique_ptr<pqxx::lazyconnection> connection,
-                       std::unique_ptr<pqxx::nontransaction> transaction,
-                       std::unique_ptr<soci::session> sql);
+      TemporaryWsvImpl(std::unique_ptr<soci::session> sql);
 
       bool apply(
           const shared_model::interface::Transaction &,
@@ -44,8 +42,6 @@ namespace iroha {
 
      private:
       std::unique_ptr<soci::session> sql_;
-      std::unique_ptr<pqxx::lazyconnection> connection_;
-      std::unique_ptr<pqxx::nontransaction> transaction_;
       std::unique_ptr<WsvQuery> wsv_;
       std::unique_ptr<WsvCommand> executor_;
       std::shared_ptr<CommandExecutor> command_executor_;

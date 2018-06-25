@@ -20,24 +20,11 @@
 #include <boost/format.hpp>
 #include "backend/protobuf/permissions.hpp"
 
-#define COMMA ,
-#define EXECUTE(sql, message)            \
-  try {                                  \
-    sql;                                 \
-  } catch (const std::exception &e) {    \
-    return expected::makeError(message); \
-  }
-
-
-
 namespace iroha {
   namespace ametsuchi {
 
-    PostgresWsvCommand::PostgresWsvCommand(pqxx::nontransaction &transaction,
-                                           soci::session &sql)
-        : transaction_(transaction),
-          sql_(sql),
-          execute_{makeExecuteResult(transaction_)} {}
+    PostgresWsvCommand::PostgresWsvCommand(soci::session &sql)
+        : sql_(sql) {}
 
     WsvCommandResult PostgresWsvCommand::insertRole(
         const shared_model::interface::types::RoleIdType &role_name) {
@@ -52,11 +39,6 @@ namespace iroha {
              % role_name % e.what())
                 .str());
       }
-      //      EXECUTE("INSERT INTO role(role_id) VALUES (:role_id)" COMMA
-      //      soci::use(role_name), (boost::format("failed to insert role: '%s',
-      //      reason: %s") % role_name % e.what()).str()); int count; sql_ <<
-      //      "SELECT count(*) FROM role", soci::into(count); return {};
-      //      };
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccountRole(
@@ -81,26 +63,27 @@ namespace iroha {
     WsvCommandResult PostgresWsvCommand::deleteAccountRole(
         const shared_model::interface::types::AccountIdType &account_id,
         const shared_model::interface::types::RoleIdType &role_name) {
-      auto result = execute_("DELETE FROM account_has_roles WHERE account_id="
-                             + transaction_.quote(account_id) + "AND role_id="
-                             + transaction_.quote(role_name) + ";");
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to delete account role, account id: '%s', "
+      std::cout << "deleteAccountRole(" << account_id << ", " << role_name
+                << ")" << std::endl;
+      try {
+        sql_ << "DELETE FROM account_has_roles WHERE account_id=:account_id AND role_id=:role_id",
+            soci::use(account_id), soci::use(role_name);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to delete account role, account id: '%s', "
                     "role name: '%s'")
                 % account_id % role_name)
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertRolePermissions(
         const shared_model::interface::types::RoleIdType &role_id,
         const shared_model::interface::RolePermissionSet &permissions) {
       auto entry = [this, &role_id](auto permission) {
-        return "(" + transaction_.quote(role_id) + ", "
-            + transaction_.quote(permission) + ")";
+        return "('" + role_id + "', '" + permission + "')";
       };
 
       // generate string with all permissions,
@@ -117,12 +100,13 @@ namespace iroha {
         }
         return s;
       };
-      std::cout << "insertRolePermissions(" << role_id << ")" << std::endl;
+      std::string params = generate_perm_string(entry);
+      std::cout << "insertRolePermissions(" << role_id << ", " << params << ")" << std::endl;
       try {
-        std::string params = generate_perm_string(entry);
         std::string query =
             "INSERT INTO role_has_permissions(role_id, permission) VALUES ";
         query += generate_perm_string(entry);
+        std::cout << query << std::endl;
         sql_ << query;
         return {};
       } catch (const std::exception &e) {
@@ -133,21 +117,6 @@ namespace iroha {
              % generate_perm_string([](auto a) { return a; }))
                 .str());
       }
-
-      //      auto result = execute_(
-      //          "INSERT INTO role_has_permissions(role_id, permission) VALUES
-      //          "
-      //          + generate_perm_string(entry) + ";");
-      //
-      //      auto message_gen = [&] {
-      //        return (boost::format("failed to insert role permissions, role "
-      //                              "id: '%s', permissions: [%s]")
-      //                % role_id % generate_perm_string([](auto a) { return a;
-      //                }))
-      //            .str();
-      //      };
-      //
-      //      return makeCommandResult(std::move(result), message_gen);
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccountGrantablePermission(
@@ -155,27 +124,28 @@ namespace iroha {
             &permittee_account_id,
         const shared_model::interface::types::AccountIdType &account_id,
         shared_model::interface::permissions::Grantable permission) {
-      auto result = execute_(
-          "INSERT INTO "
-          "account_has_grantable_permissions(permittee_account_id, "
-          "account_id, permission) VALUES ("
-          + transaction_.quote(permittee_account_id) + ", "
-          + transaction_.quote(account_id) + ", "
-          + transaction_.quote(
-                shared_model::proto::permissions::toString(permission))
-          + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert account grantable permission, "
-                              "permittee account id: '%s', "
-                              "account id: '%s', "
-                              "permission: '%s'")
+      std::string perm = shared_model::proto::permissions::toString(permission);
+      std::cout << "insertAccountGrantablePermission(" << account_id << ", " << perm
+                << ")" << std::endl;
+      try {
+        sql_ << "INSERT INTO "
+            "account_has_grantable_permissions(permittee_account_id, "
+            "account_id, permission) VALUES (:permittee_account_id, :account_id, :permission)"
+            , soci::use(permittee_account_id),
+            soci::use(account_id), soci::use(perm);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert account grantable permission, "
+                               "permittee account id: '%s', "
+                               "account id: '%s', "
+                               "permission: '%s',"
+                               "error: %s")
                 % permittee_account_id % account_id
-                % shared_model::proto::permissions::toString(permission))
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+                % shared_model::proto::permissions::toString(permission)
+                % e.what())
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::deleteAccountGrantablePermission(
@@ -183,168 +153,158 @@ namespace iroha {
             &permittee_account_id,
         const shared_model::interface::types::AccountIdType &account_id,
         shared_model::interface::permissions::Grantable permission) {
-      auto result = execute_(
-          "DELETE FROM public.account_has_grantable_permissions WHERE "
-          "permittee_account_id="
-          + transaction_.quote(permittee_account_id) + " AND account_id="
-          + transaction_.quote(account_id) + " AND permission="
-          + transaction_.quote(
-                shared_model::proto::permissions::toString(permission))
-          + " ;");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to delete account grantable permission, "
-                              "permittee account id: '%s', "
-                              "account id: '%s', "
-                              "permission id: '%s'")
+      std::cout << "deleteAccountGrantablePermission(" << account_id << ", " << shared_model::proto::permissions::toString(permission)
+                << ")" << std::endl;
+      try {
+        sql_ << "DELETE FROM public.account_has_grantable_permissions WHERE "
+            "permittee_account_id=:permittee_account_id AND account_id=:account_id AND permission=:permission"
+            , soci::use(permittee_account_id),
+            soci::use(account_id), soci::use(shared_model::proto::permissions::toString(permission));
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to delete account grantable permission, "
+                               "permittee account id: '%s', "
+                               "account id: '%s', "
+                               "permission id: '%s'")
                 % permittee_account_id % account_id
                 % shared_model::proto::permissions::toString(permission))
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccount(
         const shared_model::interface::Account &account) {
-      auto result = execute_(
-          "INSERT INTO account(account_id, domain_id, quorum, "
-          "data) VALUES ("
-          + transaction_.quote(account.accountId()) + ", "
-          + transaction_.quote(account.domainId()) + ", "
-          + transaction_.quote(account.quorum()) + ", "
-          + transaction_.quote(account.jsonData()) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert account, "
-                              "account id: '%s', "
-                              "domain id: '%s', "
-                              "quorum: '%d', "
-                              "json_data: %s")
+      std::cout << "insertAccount(" << account.toString() << std::endl;
+      try {
+        sql_ << "INSERT INTO account(account_id, domain_id, quorum,"
+            "data) VALUES (:id, :domain_id, :quorum, :data)",
+            soci::use(account.accountId()),
+            soci::use(account.domainId()),
+            soci::use(account.quorum()),
+            soci::use(account.jsonData());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert account, "
+                               "account id: '%s', "
+                               "domain id: '%s', "
+                               "quorum: '%d', "
+                               "json_data: %s")
                 % account.accountId() % account.domainId() % account.quorum()
                 % account.jsonData())
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertAsset(
         const shared_model::interface::Asset &asset) {
-      uint32_t precision = asset.precision();
-      auto result = execute_(
-          "INSERT INTO asset(asset_id, domain_id, \"precision\", data) "
-          "VALUES ("
-          + transaction_.quote(asset.assetId()) + ", "
-          + transaction_.quote(asset.domainId()) + ", "
-          + transaction_.quote(precision) + ", " + /*asset.data*/ "NULL"
-          + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert asset, asset id: '%s', "
-                              "domain id: '%s', precision: %d")
-                % asset.assetId() % asset.domainId() % precision)
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+      std::cout << "insertAsset(" << asset.toString() << std::endl;
+      try {
+        sql_ << "INSERT INTO asset(asset_id, domain_id, \"precision\", data) VALUES (:id, :domain_id, :precision, NULL)",
+            soci::use(asset.assetId()),
+            soci::use(asset.domainId()),
+            soci::use(asset.precision());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert asset, asset id: '%s', "
+                               "domain id: '%s', precision: %d")
+                % asset.assetId() % asset.domainId() % asset.precision())
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::upsertAccountAsset(
         const shared_model::interface::AccountAsset &asset) {
-      auto result = execute_(
-            "INSERT INTO account_has_asset(account_id, asset_id, amount) "
-            "VALUES ("
-            + transaction_.quote(asset.accountId()) + ", "
-            + transaction_.quote(asset.assetId()) + ", "
-            + transaction_.quote(asset.balance().toStringRepr())
-            + ") ON CONFLICT (account_id, asset_id) DO UPDATE SET "
-            "amount = EXCLUDED.amount;");
 
-      auto message_gen = [&] {
-        return (boost::format("failed to upsert account, account id: '%s', "
-                              "asset id: '%s', balance: %s")
+      std::cout << "upsertAccountAsset(" << asset.toString() << std::endl;
+      auto balance = asset.balance().toStringRepr();
+      try {
+        sql_ << "INSERT INTO account_has_asset(account_id, asset_id, amount) "
+            "VALUES (:account_id, :asset_id, :amount) ON CONFLICT (account_id, asset_id) DO UPDATE SET "
+            "amount = EXCLUDED.amount",
+            soci::use(asset.accountId()),
+            soci::use(asset.assetId()),
+            soci::use(balance);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to upsert account, account id: '%s', "
+                               "asset id: '%s', balance: %s, error %s")
                 % asset.accountId() % asset.assetId()
-                % asset.balance().toString())
-            .str();
-      };
-
-      return makeCommandResult(std::move(result), message_gen);
+                % asset.balance().toString() % e.what())
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertSignatory(
         const shared_model::interface::types::PubkeyType &signatory) {
-      auto result =
-          execute_("INSERT INTO signatory(public_key) VALUES ("
-                   + transaction_.quote(pqxx::binarystring(
-                         signatory.blob().data(), signatory.blob().size()))
-                   + ") ON CONFLICT DO NOTHING;");
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to insert signatory, signatory hex string: '%s'")
+      std::cout << "insertSignatory(" << signatory.toString() << std::endl;
+      try {
+        sql_ << "INSERT INTO signatory(public_key) VALUES (:pk) ON CONFLICT DO NOTHING;",
+            soci::use(signatory.hex());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to insert signatory, signatory hex string: '%s'")
                 % signatory.hex())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertAccountSignatory(
         const shared_model::interface::types::AccountIdType &account_id,
         const shared_model::interface::types::PubkeyType &signatory) {
-      auto result = execute_(
-          "INSERT INTO account_has_signatory(account_id, public_key) VALUES ("
-          + transaction_.quote(account_id) + ", "
-          + transaction_.quote(pqxx::binarystring(signatory.blob().data(),
-                                                  signatory.blob().size()))
-          + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert account signatory, account id: "
-                              "'%s', signatory hex string: '%s")
+      std::cout << "insertAccountSignatory(" << account_id << ", " << signatory.toString() << std::endl;
+      try {
+        sql_ << "INSERT INTO account_has_signatory(account_id, public_key) VALUES (:account_id, :pk)",
+            soci::use(account_id),
+            soci::use(signatory.hex());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to insert account signatory, account id: "
+                               "'%s', signatory hex string: '%s")
                 % account_id % signatory.hex())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::deleteAccountSignatory(
         const shared_model::interface::types::AccountIdType &account_id,
         const shared_model::interface::types::PubkeyType &signatory) {
-      auto result =
-          execute_("DELETE FROM account_has_signatory WHERE account_id = "
-                   + transaction_.quote(account_id) + " AND public_key = "
-                   + transaction_.quote(pqxx::binarystring(
-                         signatory.blob().data(), signatory.blob().size()))
-                   + ";");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to delete account signatory, account id: "
-                              "'%s', signatory hex string: '%s'")
+      std::cout << "deleteAccountSignatory(" << account_id << ", " << signatory.toString() << std::endl;
+      try {
+        sql_ << "DELETE FROM account_has_signatory WHERE account_id = :account_id AND public_key = :pk",
+            soci::use(account_id),
+            soci::use(signatory.hex());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format("failed to delete account signatory, account id: "
+                               "'%s', signatory hex string: '%s'")
                 % account_id % signatory.hex())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::deleteSignatory(
         const shared_model::interface::types::PubkeyType &signatory) {
-      pqxx::binarystring public_key(signatory.blob().data(),
-                                    signatory.blob().size());
-      auto result = execute_("DELETE FROM signatory WHERE public_key = "
-                    + transaction_.quote(public_key)
-                    + " AND NOT EXISTS (SELECT 1 FROM account_has_signatory "
-                        "WHERE public_key = "
-                    + transaction_.quote(public_key)
-                    + ") AND NOT EXISTS (SELECT 1 FROM peer WHERE public_key = "
-                    + transaction_.quote(public_key) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to delete signatory, signatory hex string: '%s'")
+      std::cout << "deleteSignatory(" << signatory.toString() << std::endl;
+      try {
+        sql_ << "DELETE FROM signatory WHERE public_key = :pk AND NOT EXISTS (SELECT 1 FROM account_has_signatory "
+            "WHERE public_key = :pk) AND NOT EXISTS (SELECT 1 FROM peer WHERE public_key = :pk)",
+            soci::use(signatory.hex()), soci::use(signatory.hex()), soci::use(signatory.hex());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to delete signatory, signatory hex string: '%s'")
                 % signatory.hex())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertPeer(
@@ -353,8 +313,6 @@ namespace iroha {
       try {
         sql_ << "INSERT INTO peer(public_key, address) VALUES (:pk, :address)",
             soci::use(peer.pubkey().hex()), soci::use(peer.address());
-        int size;
-        sql_ << "SELECT count(*) FROM peer", soci::into(size);
         return {};
       } catch (const std::exception &e) {
         return expected::makeError(
@@ -363,36 +321,22 @@ namespace iroha {
              % peer.pubkey().hex() % peer.address())
                 .str());
       }
-
-      auto result =
-          execute_("INSERT INTO peer(public_key, address) VALUES ("
-                   + transaction_.quote(pqxx::binarystring(
-                         peer.pubkey().blob().data(), peer.pubkey().size()))
-                   + ", " + transaction_.quote(peer.address()) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to insert peer, public key: '%s', address: '%s'")
-                % peer.pubkey().hex() % peer.address())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
     }
 
     WsvCommandResult PostgresWsvCommand::deletePeer(
         const shared_model::interface::Peer &peer) {
-      auto result = execute_(
-          "DELETE FROM peer WHERE public_key = "
-          + transaction_.quote(pqxx::binarystring(peer.pubkey().blob().data(),
-                                                  peer.pubkey().size()))
-          + " AND address = " + transaction_.quote(peer.address()) + ";");
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to delete peer, public key: '%s', address: '%s'")
+      std::cout << "deletePeer(" << peer.toString() << ")" << std::endl;
+      try {
+        sql_ << "DELETE FROM peer WHERE public_key = :pk AND address = :address",
+            soci::use(peer.pubkey().hex()), soci::use(peer.address());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to delete peer, public key: '%s', address: '%s'")
                 % peer.pubkey().hex() % peer.address())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::insertDomain(
@@ -410,38 +354,22 @@ namespace iroha {
              % domain.domainId() % domain.defaultRole())
                 .str());
       }
-
-      auto result =
-          execute_("INSERT INTO domain(domain_id, default_role) VALUES ("
-                   + transaction_.quote(domain.domainId()) + ", "
-                   + transaction_.quote(domain.defaultRole()) + ");");
-
-      auto message_gen = [&] {
-        return (boost::format("failed to insert domain, domain id: '%s', "
-                              "default role: '%s'")
-                % domain.domainId() % domain.defaultRole())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
     }
 
     WsvCommandResult PostgresWsvCommand::updateAccount(
         const shared_model::interface::Account &account) {
-      auto result = execute_(
-            "UPDATE account\n"
-            "   SET quorum=" +
-            transaction_.quote(account.quorum()) +
-            "\n"
-            " WHERE account_id=" +
-            transaction_.quote(account.accountId()) + ";");
-
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to update account, account id: '%s', quorum: '%s'")
+      std::cout << "updateAccount(" << account.toString() << ")" << std::endl;
+      try {
+        sql_ << "UPDATE account SET quorum=:quorum WHERE account_id=:account_id",
+            soci::use(account.quorum()), soci::use(account.accountId());
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to update account, account id: '%s', quorum: '%s'")
                 % account.accountId() % account.quorum())
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
 
     WsvCommandResult PostgresWsvCommand::setAccountKV(
@@ -449,24 +377,30 @@ namespace iroha {
         const shared_model::interface::types::AccountIdType &creator_account_id,
         const std::string &key,
         const std::string &val) {
-      auto result = execute_(
-          "UPDATE account SET data = jsonb_set(CASE WHEN data ?"
-          + transaction_.quote(creator_account_id)
-          + " THEN data ELSE jsonb_set(data, "
-          + transaction_.quote("{" + creator_account_id + "}") + ","
-          + transaction_.quote("{}") + ") END,"
-          + transaction_.quote("{" + creator_account_id + ", " + key + "}")
-          + "," + transaction_.quote("\"" + val + "\"")
-          + ") WHERE account_id=" + transaction_.quote(account_id) + ";");
-
-      auto message_gen = [&] {
-        return (boost::format(
-                    "failed to set account key-value, account id: '%s', "
+      std::cout << "setAccountKV(" << account_id << ", " << creator_account_id << ")" << std::endl;
+      std::string json = "{" + creator_account_id + "}";
+      std::string empty_json = "{}";
+      std::string filled_json = "{" + creator_account_id + ", " + key + "}";
+      std::string value = "\"" + val + "\"";
+      try {
+        sql_ << "UPDATE account SET data = jsonb_set("
+            "CASE WHEN data ?:creator_account_id THEN data ELSE jsonb_set(data, :json, :empty_json) END, "
+            " :filled_json, :val) WHERE account_id=:account_id",
+            soci::use(creator_account_id),
+            soci::use(json),
+            soci::use(empty_json),
+            soci::use(filled_json),
+            soci::use(value),
+            soci::use(account_id);
+        return {};
+      } catch (const std::exception &e) {
+        return expected::makeError(
+            (boost::format(
+                "failed to set account key-value, account id: '%s', "
                     "creator account id: '%s',\n key: '%s', value: '%s'")
                 % account_id % creator_account_id % key % val)
-            .str();
-      };
-      return makeCommandResult(std::move(result), message_gen);
+                .str());
+      }
     }
   }  // namespace ametsuchi
 }  // namespace iroha

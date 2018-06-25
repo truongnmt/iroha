@@ -28,11 +28,8 @@ namespace iroha {
   namespace ametsuchi {
     class PostgresWsvQuery : public WsvQuery {
      public:
-      explicit PostgresWsvQuery(pqxx::nontransaction &transaction,
-                                soci::session &sql);
-      PostgresWsvQuery(std::unique_ptr<pqxx::lazyconnection> connection,
-                       std::unique_ptr<pqxx::nontransaction> transaction,
-                       std::unique_ptr<soci::session> sql_ptr);
+      explicit PostgresWsvQuery(soci::session &sql);
+      PostgresWsvQuery(std::unique_ptr<soci::session> sql_ptr);
 
       boost::optional<std::vector<shared_model::interface::types::RoleIdType>>
       getAccountRoles(const shared_model::interface::types::AccountIdType
@@ -78,14 +75,7 @@ namespace iroha {
      private:
       std::unique_ptr<soci::session> sql_ptr_;
       soci::session &sql_;
-      std::unique_ptr<pqxx::lazyconnection> connection_ptr_;
-      std::unique_ptr<pqxx::nontransaction> transaction_ptr_;
-
-      pqxx::nontransaction &transaction_;
       logger::Logger log_;
-
-      using ExecuteType = decltype(makeExecuteOptional(transaction_, log_));
-      ExecuteType execute_;
     };
   }  // namespace ametsuchi
 }  // namespace iroha

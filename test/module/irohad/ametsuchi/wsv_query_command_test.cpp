@@ -48,26 +48,12 @@ namespace iroha {
 
       void SetUp() override {
         AmetsuchiTest::SetUp();
-        postgres_connection = std::make_unique<pqxx::lazyconnection>(pgopt_);
-        try {
-          postgres_connection->activate();
-        } catch (const pqxx::broken_connection &e) {
-          FAIL() << "Connection to PostgreSQL broken: " << e.what();
-        }
-        wsv_transaction =
-            std::make_unique<pqxx::nontransaction>(*postgres_connection);
+        sql = std::make_unique<soci::session>(soci::postgresql, pgopt_);
 
-        auto pool = std::make_shared<soci::connection_pool>(10);
+        command = std::make_unique<PostgresWsvCommand>(*sql);
+        query = std::make_unique<PostgresWsvQuery>(*sql);
 
-        for (size_t i = 0; i != 10; i++) {
-          soci::session &session = pool->at(i);
-          session.open(soci::postgresql, pgopt_);
-        }
-
-        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction, pool);
-        query = std::make_unique<PostgresWsvQuery>(*wsv_transaction);
-
-        wsv_transaction->exec(init_);
+        *sql << init_;
       }
 
       std::string role = "role";
@@ -76,8 +62,7 @@ namespace iroha {
       std::unique_ptr<shared_model::interface::Account> account;
       std::unique_ptr<shared_model::interface::Domain> domain;
 
-      std::unique_ptr<pqxx::lazyconnection> postgres_connection;
-      std::unique_ptr<pqxx::nontransaction> wsv_transaction;
+      std::unique_ptr<soci::session> sql;
 
       std::unique_ptr<WsvCommand> command;
       std::unique_ptr<WsvQuery> query;
@@ -113,7 +98,7 @@ namespace iroha {
 
     TEST_F(RoleTest, InsertTwoRole) {
       ASSERT_TRUE(val(command->insertRole("role")));
-      ASSERT_TRUE(val(command->insertRole("role")));
+      ASSERT_TRUE(err(command->insertRole("role")));
     }
 
     class RolePermissionsTest : public WsvQueryCommandTest {
@@ -471,26 +456,14 @@ namespace iroha {
       // skip database setup
       void SetUp() override {
         AmetsuchiTest::SetUp();
-        postgres_connection = std::make_unique<pqxx::lazyconnection>(pgopt_);
-        try {
-          postgres_connection->activate();
-        } catch (const pqxx::broken_connection &e) {
-          FAIL() << "Connection to PostgreSQL broken: " << e.what();
-        }
-        wsv_transaction =
-            std::make_unique<pqxx::nontransaction>(*postgres_connection);
+        sql = std::make_unique<soci::session>(soci::postgresql, pgopt_);
 
-        auto pool = std::make_shared<soci::connection_pool>(10);
-
-        for (size_t i = 0; i != 10; i++) {
-          soci::session &session = pool->at(i);
-          session.open(soci::postgresql, pgopt_);
-        }
-
-        command = std::make_unique<PostgresWsvCommand>(*wsv_transaction, pool);
-        query = std::make_unique<PostgresWsvQuery>(*wsv_transaction);
+        command = std::make_unique<PostgresWsvCommand>(*sql);
+        query = std::make_unique<PostgresWsvQuery>(*sql);
       }
     };
+
+    std::unique_ptr<soci::session> sql;
 
     /**
      * @given not set up database

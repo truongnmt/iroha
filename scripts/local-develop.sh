@@ -36,6 +36,8 @@ pghost=127.0.0.1
 
 pgid=$(docker run -p $pghost:$pgport:$pgport --rm --name $pgname -e POSTGRES_USER=$user -e POSTGRES_PASSSWORD=$password -d postgres:9.5)
 
+docker run -p 127.0.0.1:5432:5432 --rm --name postgrestestimage -e POSTGRES_USER=postgres -e POSTGRES_PASSSWORD=mysecretpassword -d postgres:9.5
+
 # stderr
 >&2 echo "postgres: 127.0.0.1:$pgport {login: $user, pwd: $password}"
 
