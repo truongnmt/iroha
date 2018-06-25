@@ -216,6 +216,7 @@ pipeline {
           steps {
             script {
               checkout scm
+              sh "rm .git/index.lock"
             }
             timeout(120) {
               waitUntil {
