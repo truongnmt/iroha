@@ -141,9 +141,10 @@ def doPythonWheels(os, buildType) {
   sh """
     mkdir -p $wheelPath/iroha; \
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
-    sed -i 's/{{ PYPI_VERSION }}/$version/'
-    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
+    cp .jenkinsci/python_bindings/files/setup.py $wheelPath/setup.py; \
     cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
+    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
+    sed -i 's/{{ PYPI_VERSION }}/$version/ $wheelPath/setup.py'
     source activate $envs; \
     pip wheel --no-deps $wheelPath/; \
     source deactivate;
