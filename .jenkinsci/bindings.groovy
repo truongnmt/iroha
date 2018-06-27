@@ -134,9 +134,9 @@ def doAndroidBindings(abiVersion) {
 
 def doPythonWheels(os, buildType) {
   def envs = "py3.5"
-  // def version = "0.0.1-" + (script: 'date "+%Y%m%d"', returnStdout: true).trim()
+  // def version = "0.0.1-" + sh(script: 'date "+%Y%m%d"', returnStdout: true).trim()
   // jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
-  def GIT_TAG = (script: 'git describe --abbrev=0 --tags', returnStdout: true).trim()
+  def GIT_TAG = sh(script: 'git describe --abbrev=0 --tags', returnStdout: true).trim()
   def version = "${GIT_TAG}-${env.GIT_BRANCH}-${BUILD_NUMBER}"
   if (env.PBVersion == "python2") { envs = "py2.7" }
   def wheelPath="wheels"
