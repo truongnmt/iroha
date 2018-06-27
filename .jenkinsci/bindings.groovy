@@ -136,7 +136,8 @@ def doPythonWheels(os, buildType) {
   def envs = "py3.5"
   // def version = "0.0.1-" + (script: 'date "+%Y%m%d"', returnStdout: true).trim()
   // jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
-  def version = env.BUILD_TAG
+  def GIT_TAG = (script: 'git describe --abbrev=0 --tags', returnStdout: true).trim()
+  def version = "${GIT_TAG}-${env.GIT_BRANCH}-${BUILD_NUMBER}"
   if (env.PBVersion == "python2") { envs = "py2.7" }
   def wheelPath="wheels"
   sh """
@@ -145,7 +146,7 @@ def doPythonWheels(os, buildType) {
     cp .jenkinsci/python_bindings/files/setup.py $wheelPath/setup.py; \
     cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
     cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
-    sed -i 's/{{ PYPI_VERSION }}/$version/ $wheelPath/setup.py'
+    sed -i 's/{{ PYPI_VERSION }}/$version/' $wheelPath/setup.py; \
     source activate $envs; \
     pip wheel --no-deps $wheelPath/; \
     source deactivate;

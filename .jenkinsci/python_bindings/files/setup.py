@@ -6,7 +6,7 @@ class BinaryDistribution(Distribution):
             return True
 
 setup(name='iroha',
-      version={{ PYPI_VERSION }},
+      version='{{ PYPI_VERSION }}',
       description='Python library for Hyperledger Iroha',
       url='http://github.com/hyperledger/iroha',
       author='Soramitsu Co Ltd',
