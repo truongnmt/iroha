@@ -139,7 +139,7 @@ def doPythonWheels(os, buildType) {
   if (env.PBVersion == "python2") { envs = "py2.7" }
   if (buildType == "Release") { repo = "release"}
   if (env.nightly == True) { repo = "nightly"}
-  def version = "${repo}-${env.GIT_COMMIT:0:7}"
+  def version = "${repo}-${env.GIT_COMMIT.substring(0,7)}"
   sh """
     mkdir -p $wheelPath/iroha; \
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
