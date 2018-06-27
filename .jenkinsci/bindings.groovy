@@ -134,11 +134,12 @@ def doAndroidBindings(abiVersion) {
 
 def doPythonWheels(os, buildType) {
   def envs = "py3.5"
-  // def version = "0.0.1-" + sh(script: 'date "+%Y%m%d"', returnStdout: true).trim()
-  // jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
-  def version = "${env.GIT_TAG_NAME}-${env.GIT_BRANCH}-${env.BUILD_NUMBER}"
-  if (env.PBVersion == "python2") { envs = "py2.7" }
+  def repo = "dev"
   def wheelPath="wheels"
+  if (env.PBVersion == "python2") { envs = "py2.7" }
+  if (buildType == "Release") { repo = "release"}
+  if (env.nightly == True) { repo = "nightly"}
+  def version = "${repo}-${env.GIT_COMMIT:0:7}"
   sh """
     mkdir -p $wheelPath/iroha; \
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
@@ -150,7 +151,7 @@ def doPythonWheels(os, buildType) {
     source deactivate;
   """
   withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-    sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-dev/ *.whl"
+    sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
   }
 }
 return this
