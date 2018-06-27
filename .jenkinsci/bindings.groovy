@@ -135,13 +135,14 @@ def doAndroidBindings(abiVersion) {
 def doPythonWheels(os, buildType) {
   def envs = "py3.5"
   // def version = "0.0.1-" + (script: 'date "+%Y%m%d"', returnStdout: true).trim()
+  // jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
   def version = env.BUILD_TAG
   if (env.PBVersion == "python2") { envs = "py2.7" }
   def wheelPath="wheels"
   sh """
     mkdir -p $wheelPath/iroha; \
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
-    jinja2 -D PYPI_VERSION=$version .jenkinsci/python_bindings/files/setup.py > $wheelPath/setup.py;
+    sed -i 's/{{ PYPI_VERSION }}/$version/'
     cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
     cp .jenkinsci/python_bindings/files/setup.cfg $wheelPath; \
     source activate $envs; \
