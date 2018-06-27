@@ -82,6 +82,7 @@ namespace iroha {
         std::shared_ptr<shared_model::interface::Query> qry) {
       if (not checkSignatories(*qry)) {
         auto response = buildStatefulError(qry->hash());
+        std::lock_guard<std::mutex> lock(notifier_mutex_);
         subject_.get_subscriber().on_next(response);
         return;
       }
@@ -112,7 +113,6 @@ namespace iroha {
       auto qpf = QueryProcessingFactory(wsv_query, storage_->getBlockQuery());
       if (not qpf.validate(*qry)) {
         auto response = buildBlocksQueryError("Stateful invalid");
-        blocksQuerySubject_.get_subscriber().on_next(response);
         return rxcpp::observable<>::just(
             std::shared_ptr<shared_model::interface::BlockQueryResponse>(
                 response));

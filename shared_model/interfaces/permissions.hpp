@@ -7,6 +7,7 @@
 #define IROHA_SHARED_MODEL_PERMISSIONS_HPP
 
 #include <bitset>
+#include <functional>
 #include <initializer_list>
 #include <vector>
 
@@ -111,6 +112,8 @@ namespace shared_model {
       PermissionSet<Perm> &operator&=(const PermissionSet<Perm> &r);
       PermissionSet<Perm> &operator|=(const PermissionSet<Perm> &r);
       PermissionSet<Perm> &operator^=(const PermissionSet<Perm> &r);
+
+      void iterate(std::function<void(Perm)> f) const;
     };
 
     using RolePermissionSet = PermissionSet<permissions::Role>;

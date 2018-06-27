@@ -36,7 +36,6 @@
 #include "model/converters/json_query_factory.hpp"
 #include "model/converters/json_transaction_factory.hpp"
 #include "model/converters/pb_transaction_factory.hpp"
-#include "validators/permissions.hpp"
 
 #include "builders/protobuf/queries.hpp"
 #include "builders/protobuf/transaction.hpp"
@@ -50,7 +49,6 @@ using namespace iroha::ametsuchi;
 using namespace iroha::network;
 using namespace iroha::validation;
 using namespace shared_model::proto;
-using namespace shared_model::permissions;
 
 using namespace std::chrono_literals;
 constexpr std::chrono::milliseconds proposal_delay = 10s;
@@ -239,16 +237,15 @@ TEST_F(ClientServerTest, SendQueryWhenValid) {
   EXPECT_CALL(*wsv_query, getSignatories("admin@test"))
       .WillRepeatedly(Return(signatories));
 
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  "admin@test", "test@test", can_get_my_acc_detail))
-      .WillOnce(Return(true));
-
   EXPECT_CALL(*wsv_query, getAccountDetail("test@test"))
       .WillOnce(Return(boost::make_optional(std::string("value"))));
 
+  const std::vector<std::string> kRole{"role"};
   EXPECT_CALL(*wsv_query, getAccountRoles("admin@test"))
-      .WillOnce(Return(boost::none));
+      .WillOnce(Return(boost::make_optional(kRole)));
+  EXPECT_CALL(*wsv_query, getRolePermissions(kRole[0]))
+      .WillOnce(Return(shared_model::interface::RolePermissionSet{
+          shared_model::interface::permissions::Role::kGetAllAccDetail}));
 
   auto query = QueryBuilder()
                    .createdTime(iroha::time::now())
@@ -268,11 +265,6 @@ TEST_F(ClientServerTest, SendQueryWhenStatefulInvalid) {
 
   EXPECT_CALL(*wsv_query, getSignatories("admin@test"))
       .WillRepeatedly(Return(signatories));
-
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  "admin@test", "test@test", can_get_my_acc_detail))
-      .WillOnce(Return(false));
 
   EXPECT_CALL(*wsv_query, getAccountRoles("admin@test"))
       .WillOnce(Return(boost::none));

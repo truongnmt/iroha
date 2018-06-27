@@ -23,6 +23,7 @@ namespace shared_model {
             return Role::kSetMyAccountDetail;
           case Grantable::kTransferMyAssets:
             return Role::kTransferMyAssets;
+          default:;
         }
         return Role::COUNT;
       }
@@ -109,17 +110,29 @@ PermissionSet<Perm> &PermissionSet<Perm>::operator&=(
   Parent::operator&=(r);
   return *this;
 }
+
 template <typename Perm>
 PermissionSet<Perm> &PermissionSet<Perm>::operator|=(
     const PermissionSet<Perm> &r) {
   Parent::operator|=(r);
   return *this;
 }
+
 template <typename Perm>
 PermissionSet<Perm> &PermissionSet<Perm>::operator^=(
     const PermissionSet<Perm> &r) {
   Parent::operator^=(r);
   return *this;
+}
+
+template <typename Perm>
+void PermissionSet<Perm>::iterate(std::function<void(Perm)> f) const {
+  for (size_t i = 0; i < size(); ++i) {
+    auto perm = static_cast<Perm>(i);
+    if (test(perm)) {
+      f(perm);
+    }
+  }
 }
 
 template class shared_model::interface::PermissionSet<permissions::Role>;
