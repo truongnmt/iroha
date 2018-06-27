@@ -137,8 +137,8 @@ def doPythonWheels(os, buildType) {
   def repo = "dev"
   def wheelPath="wheels"
   if (env.PBVersion == "python2") { envs = "py2.7" }
-  if (buildType == "Release") { repo = "release"}
-  if (env.nightly == true) { repo = "nightly"}
+  if (env.build_type == "Release") { repo = "release"}
+  if (env.nightly) { repo = "nightly"}
   def version = "${repo}-${env.GIT_COMMIT.substring(0,7)}"
   sh """
     mkdir -p $wheelPath/iroha; \
