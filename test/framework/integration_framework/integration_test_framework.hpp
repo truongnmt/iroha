@@ -236,10 +236,10 @@ namespace integration_framework {
 
     /// maximum time of waiting before appearing next proposal
     // TODO 21/12/2017 muratovv make relation of time with instance's config
-    const milliseconds proposal_waiting = milliseconds(20000);
+    const milliseconds proposal_waiting = milliseconds(200000);
 
     /// maximum time of waiting before appearing next committed block
-    const milliseconds block_waiting = milliseconds(20000);
+    const milliseconds block_waiting = milliseconds(200000);
 
     size_t maximum_proposal_size_;
 

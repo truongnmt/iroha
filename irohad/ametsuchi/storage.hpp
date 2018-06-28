@@ -23,6 +23,7 @@
 #include "ametsuchi/mutable_factory.hpp"
 #include "ametsuchi/temporary_factory.hpp"
 #include "common/result.hpp"
+#include <soci/soci.h>
 
 namespace shared_model {
   namespace interface {
@@ -74,6 +75,8 @@ namespace iroha {
        * Remove all information from ledger
        */
       virtual void dropStorage() = 0;
+
+      virtual void saveProposal(soci::session &sql) = 0;
 
       virtual ~Storage() = default;
     };

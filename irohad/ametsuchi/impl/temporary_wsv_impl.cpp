@@ -26,13 +26,13 @@ namespace iroha {
     TemporaryWsvImpl::TemporaryWsvImpl(
         std::unique_ptr<soci::session> sql)
         : sql_(std::move(sql)),
-          wsv_(std::make_unique<PostgresWsvQuery>(*sql_)),
-          executor_(std::make_unique<PostgresWsvCommand>(*sql_)),
+          wsv_(std::make_shared<PostgresWsvQuery>(*sql_)),
+          executor_(std::make_shared<PostgresWsvCommand>(*sql_)),
           log_(logger::log("TemporaryWSV")) {
-      auto query = std::make_shared<PostgresWsvQuery>(*sql_);
-      auto command = std::make_shared<PostgresWsvCommand>(*sql_);
-      command_executor_ = std::make_shared<CommandExecutor>(query, command);
-      command_validator_ = std::make_shared<CommandValidator>(query);
+//      auto query = std::make_shared<PostgresWsvQuery>(*sql_);
+//      auto command = std::make_shared<PostgresWsvCommand>(*sql_);
+      command_executor_ = std::make_shared<CommandExecutor>(wsv_, executor_);
+      command_validator_ = std::make_shared<CommandValidator>(wsv_);
       *sql_ << "BEGIN";
     }
 
@@ -44,7 +44,7 @@ namespace iroha {
       command_executor_->setCreatorAccountId(tx_creator);
       command_validator_->setCreatorAccountId(tx_creator);
       auto execute_command = [this, &tx_creator](auto &command) {
-        auto account = wsv_->getAccount(tx_creator).value();
+//        auto account = wsv_->getAccount(tx_creator).value();
         if (not boost::apply_visitor(*command_validator_, command.get())) {
           return false;
         }
@@ -70,6 +70,7 @@ namespace iroha {
     }
 
     TemporaryWsvImpl::~TemporaryWsvImpl() {
+      log_->info("Rolling Back transaction");
       *sql_ << "ROLLBACK";
     }
   }  // namespace ametsuchi

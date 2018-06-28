@@ -40,10 +40,10 @@ namespace iroha {
 
       ~TemporaryWsvImpl() override;
 
-     private:
       std::unique_ptr<soci::session> sql_;
-      std::unique_ptr<WsvQuery> wsv_;
-      std::unique_ptr<WsvCommand> executor_;
+     private:
+      std::shared_ptr<WsvQuery> wsv_;
+      std::shared_ptr<WsvCommand> executor_;
       std::shared_ptr<CommandExecutor> command_executor_;
       std::shared_ptr<CommandValidator> command_validator_;
 

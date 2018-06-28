@@ -33,6 +33,8 @@ namespace iroha {
     const char *kPsqlBroken = "Connection to PostgreSQL broken: %s";
     const char *kTmpWsv = "TemporaryWsv";
 
+    std::vector<std::string> StorageImpl::prepared_txs = {};
+
     ConnectionContext::ConnectionContext(
         std::unique_ptr<KeyValueStorage> block_store)
         : block_store(std::move(block_store)) {}
@@ -409,5 +411,18 @@ CREATE TABLE IF NOT EXISTS index_by_id_height_asset (
     index text
 );
 )";
+    void StorageImpl::saveProposal(soci::session &sql) {
+      static int txcounter = 20;
+      while (true) {
+        try {
+          sql << "PREPARE TRANSACTION '" << std::to_string(txcounter) << "'";
+          prepared_txs.push_back(std::to_string(txcounter));
+          log_->info("Preparing transaction: {}", txcounter);
+          return;
+        } catch (...) {
+          txcounter++;
+        }
+      }
+    }
   }  // namespace ametsuchi
 }  // namespace iroha

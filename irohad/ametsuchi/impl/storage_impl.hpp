@@ -52,7 +52,7 @@ namespace iroha {
 
       static expected::Result<std::shared_ptr<soci::connection_pool>,
                               std::string>
-      initPostgresConnection(std::string &options_str, size_t pool_size = 10);
+      initPostgresConnection(std::string &options_str, size_t pool_size = 20);
 
      public:
       static expected::Result<std::shared_ptr<StorageImpl>, std::string> create(
@@ -91,6 +91,10 @@ namespace iroha {
 
       rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
       on_commit() override;
+
+      void saveProposal(soci::session &sql) override;
+
+      static std::vector<std::string> prepared_txs;
 
      protected:
       StorageImpl(std::string block_store_dir,

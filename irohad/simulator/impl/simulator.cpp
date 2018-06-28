@@ -18,12 +18,14 @@
 #include "simulator/impl/simulator.hpp"
 
 #include <boost/range/adaptor/transformed.hpp>
+#include <ametsuchi/storage.hpp>
 
 #include "backend/protobuf/empty_block.hpp"
 #include "builders/protobuf/block.hpp"
 #include "builders/protobuf/empty_block.hpp"
 #include "interfaces/iroha_internal/block.hpp"
 #include "interfaces/iroha_internal/proposal.hpp"
+#include "ametsuchi/impl/temporary_wsv_impl.hpp"
 
 namespace iroha {
   namespace simulator {
@@ -31,7 +33,7 @@ namespace iroha {
     Simulator::Simulator(
         std::shared_ptr<network::OrderingGate> ordering_gate,
         std::shared_ptr<validation::StatefulValidator> statefulValidator,
-        std::shared_ptr<ametsuchi::TemporaryFactory> factory,
+        std::shared_ptr<ametsuchi::Storage> factory,
         std::shared_ptr<ametsuchi::BlockQuery> blockQuery,
         std::shared_ptr<shared_model::crypto::CryptoModelSigner<>>
             crypto_signer)
@@ -88,6 +90,8 @@ namespace iroha {
                   &temporaryStorage) {
             auto validated_proposal =
                 validator_->validate(proposal, *temporaryStorage.value);
+
+//            ametsuchi_factory_->saveProposal(*((ametsuchi::TemporaryWsvImpl *) temporaryStorage.value.get())->sql_);
             notifier_.get_subscriber().on_next(validated_proposal);
           },
           [&](expected::Error<std::string> &error) {

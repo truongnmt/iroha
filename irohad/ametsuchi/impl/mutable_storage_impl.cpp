@@ -24,6 +24,7 @@
 #include "ametsuchi/impl/postgres_wsv_query.hpp"
 #include "ametsuchi/wsv_command.hpp"
 #include "model/sha3_hash.hpp"
+#include "storage_impl.hpp"
 
 namespace iroha {
   namespace ametsuchi {
@@ -45,7 +46,6 @@ namespace iroha {
       auto command = std::make_shared<PostgresWsvCommand>(*sql_);
       command_executor_ =
           std::make_shared<CommandExecutor>(CommandExecutor(query, command));
-      *sql_ << "BEGIN";
     }
 
     bool MutableStorageImpl::apply(
@@ -54,9 +54,33 @@ namespace iroha {
                            WsvQuery &,
                            const shared_model::interface::types::HashType &)>
             function) {
+
+//      bool commited = false;
+//      while (!StorageImpl::prepared_txs.empty()) {
+//        try {
+//          *sql_ << "COMMIT PREPARED '" + (StorageImpl::prepared_txs.back()) + "'";
+//          log_->info("Committing transaction {}", (StorageImpl::prepared_txs.back()));
+//          StorageImpl::prepared_txs.pop_back();
+//          commited = true;
+//        } catch (...) {
+//        }
+//      }
+//
+//      if (commited) {
+//        block_store_.insert(std::make_pair(block.height(), clone(block)));
+//        block_index_->index(block);
+//
+//        top_hash_ = block.hash();
+//        return true;
+//      }
+
+      *sql_ << "BEGIN";
+
       auto execute_transaction = [this](auto &transaction) {
         command_executor_->setCreatorAccountId(transaction.creatorAccountId());
+//        log_->info("executing transaction");
         auto execute_command = [this](auto &command) {
+//          log_->info("executing command");
           auto result = boost::apply_visitor(*command_executor_, command.get());
           return result.match([](expected::Value<void> &v) { return true; },
                               [&](expected::Error<ExecutionError> &e) {
@@ -84,6 +108,7 @@ namespace iroha {
       } else {
         *sql_ << "ROLLBACK TO SAVEPOINT savepoint2_";
       }
+
       return result;
     }
 

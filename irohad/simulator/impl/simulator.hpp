@@ -27,6 +27,7 @@
 #include "simulator/block_creator.hpp"
 #include "simulator/verified_proposal_creator.hpp"
 #include "validation/stateful_validator.hpp"
+#include "ametsuchi/storage.hpp"
 
 namespace iroha {
   namespace simulator {
@@ -36,7 +37,7 @@ namespace iroha {
       Simulator(
           std::shared_ptr<network::OrderingGate> ordering_gate,
           std::shared_ptr<validation::StatefulValidator> statefulValidator,
-          std::shared_ptr<ametsuchi::TemporaryFactory> factory,
+          std::shared_ptr<ametsuchi::Storage> factory,
           std::shared_ptr<ametsuchi::BlockQuery> blockQuery,
           std::shared_ptr<shared_model::crypto::CryptoModelSigner<>>
               crypto_signer);
@@ -70,7 +71,7 @@ namespace iroha {
       rxcpp::composite_subscription verified_proposal_subscription_;
 
       std::shared_ptr<validation::StatefulValidator> validator_;
-      std::shared_ptr<ametsuchi::TemporaryFactory> ametsuchi_factory_;
+      std::shared_ptr<ametsuchi::Storage> ametsuchi_factory_;
       std::shared_ptr<ametsuchi::BlockQuery> block_queries_;
       std::shared_ptr<shared_model::crypto::CryptoModelSigner<>> crypto_signer_;
 
