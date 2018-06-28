@@ -411,7 +411,7 @@ pipeline {
                   ['PARALLELISM': params.PARALLELISM])
                 if (params.JavaBindings) {
                   iC.inside("-v /tmp/${env.GIT_COMMIT}/bindings-artifact:/tmp/bindings-artifact") {
-                    bindings.doJavaBindings('linux', params.JBBuildType)
+                    bindings.doJavaBindings('linux', params.JBPackageName, params.JBBuildType)
                   }
                 }
                 if (params.PythonBindings) {
@@ -470,7 +470,7 @@ pipeline {
             script {
               def bindings = load ".jenkinsci/bindings.groovy"
               if (params.JavaBindings) {
-                bindings.doJavaBindings('windows', params.JBBuildType)
+                bindings.doJavaBindings('windows', params.JBPackageName, params.JBBuildType)
               }
               if (params.PythonBindings) {
                 bindings.doPythonBindings('windows', params.PBBuildType)
