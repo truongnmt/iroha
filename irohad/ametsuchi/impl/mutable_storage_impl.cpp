@@ -54,25 +54,25 @@ namespace iroha {
                            WsvQuery &,
                            const shared_model::interface::types::HashType &)>
             function) {
+      
+      bool commited = false;
+      while (!StorageImpl::prepared_txs.empty()) {
+        try {
+          *sql_ << "COMMIT PREPARED '" + (StorageImpl::prepared_txs.back()) + "'";
+          log_->info("Committing transaction {}", (StorageImpl::prepared_txs.back()));
+          StorageImpl::prepared_txs.pop_back();
+          commited = true;
+        } catch (...) {
+        }
+      }
 
-//      bool commited = false;
-//      while (!StorageImpl::prepared_txs.empty()) {
-//        try {
-//          *sql_ << "COMMIT PREPARED '" + (StorageImpl::prepared_txs.back()) + "'";
-//          log_->info("Committing transaction {}", (StorageImpl::prepared_txs.back()));
-//          StorageImpl::prepared_txs.pop_back();
-//          commited = true;
-//        } catch (...) {
-//        }
-//      }
-//
-//      if (commited) {
-//        block_store_.insert(std::make_pair(block.height(), clone(block)));
-//        block_index_->index(block);
-//
-//        top_hash_ = block.hash();
-//        return true;
-//      }
+      if (commited) {
+        block_store_.insert(std::make_pair(block.height(), clone(block)));
+        block_index_->index(block);
+
+        top_hash_ = block.hash();
+        return true;
+      }
 
       *sql_ << "BEGIN";
 
@@ -114,7 +114,7 @@ namespace iroha {
 
     MutableStorageImpl::~MutableStorageImpl() {
       if (not committed) {
-        *sql_ << "ROLLBACK";
+//        *sql_ << "ROLLBACK";
       }
     }
   }  // namespace ametsuchi

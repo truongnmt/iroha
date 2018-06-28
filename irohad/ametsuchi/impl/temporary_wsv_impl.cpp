@@ -71,7 +71,7 @@ namespace iroha {
 
     TemporaryWsvImpl::~TemporaryWsvImpl() {
       log_->info("Rolling Back transaction");
-      *sql_ << "ROLLBACK";
+//      *sql_ << "ROLLBACK";
     }
   }  // namespace ametsuchi
 }  // namespace iroha

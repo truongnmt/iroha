@@ -91,7 +91,7 @@ namespace iroha {
             auto validated_proposal =
                 validator_->validate(proposal, *temporaryStorage.value);
 
-//            ametsuchi_factory_->saveProposal(*((ametsuchi::TemporaryWsvImpl *) temporaryStorage.value.get())->sql_);
+            ametsuchi_factory_->saveProposal(*((ametsuchi::TemporaryWsvImpl *) temporaryStorage.value.get())->sql_);
             notifier_.get_subscriber().on_next(validated_proposal);
           },
           [&](expected::Error<std::string> &error) {
