@@ -135,7 +135,9 @@ def doAndroidBindings(abiVersion) {
 def doPythonWheels(os, buildType) {
   def version;
   def repo;
-  def envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5"
+  def envs
+  if (os == 'windows') { envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5" }
+  else if (os == 'linux') { envs = (env.PBVersion == "python2") ? "pip" : "pip3" }
   if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
     version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
     repo = "release"
@@ -146,7 +148,7 @@ def doPythonWheels(os, buildType) {
     if (env.nightly == true) {
       version += "-nightly"
       repo += "-nightly"
-     }
+    }
     version +="-${env.GIT_COMMIT.substring(0,8)}"
   }
 
@@ -155,16 +157,24 @@ def doPythonWheels(os, buildType) {
     cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
     cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels; \
     cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
-    sed -i 's/{{ PYPI_VERSION }}/$version/' wheels/setup.py; \
+    sed -i 's/{{ PYPI_VERSION }}/${version}/' wheels/setup.py; \
     modules=(block_pb2 commands_pb2 endpoint_pb2 endpoint_pb2_grpc iroha loader_pb2 loader_pb2_grpc ordering_pb2 ordering_pb2_grpc primitive_pb2 queries_pb2 responses_pb2 yac_pb2 yac_pb2_grpc); \
     for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i -E "s/import \$m/from . import \$m/g" \$f; done; done; \
-    source activate $envs; \
-    pip wheel --no-deps wheels/; \
-    source deactivate;
   """
+  if (os == 'windows') {
+    sh """
+      source activate ${envs}; \
+      pip wheel --no-deps wheels/; \
+      source deactivate;
+    """
+  }
+  else if (os == 'linux') {
+    sh "${envs} wheel --no-deps wheels/;"
+  }
+
   if (env.PBBuildType == "Release")
     withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-      sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
+      sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
     }
 }
 return this
