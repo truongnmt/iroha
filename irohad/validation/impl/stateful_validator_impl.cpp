@@ -39,26 +39,27 @@ namespace iroha {
       log_->info("transactions in proposal: {}",
                  proposal.transactions().size());
       auto checking_transaction = [this](const auto &tx, auto &queries) {
-        return expected::Result<void, std::string>(
+        return expected::Result<void, validation::CommandNameAndError>(
             [&]() -> expected::Result<
                          std::shared_ptr<shared_model::interface::Account>,
-                         std::string> {
+                         validation::CommandNameAndError> {
               // Check if tx creator has account
               auto account = queries.getAccount(tx.creatorAccountId());
               if (account) {
                 return expected::makeValue(*account);
               }
-              return expected::makeError(
+              return expected::makeError(validation::CommandNameAndError{
+                  "Initial transaction verification: no such account",
                   (boost::format("stateful validator error: could not fetch "
                                  "account with id %s")
                    % tx.creatorAccountId())
-                      .str());
+                      .str()});
             }() |
                 [&](const auto &account)
                       -> expected::Result<
                              std::vector<
                                  shared_model::interface::types::PubkeyType>,
-                             std::string> {
+                             validation::CommandNameAndError> {
               // Check if account has signatories and quorum to execute
               // transaction
               if (boost::size(tx.signatures()) >= account->quorum()) {
@@ -67,30 +68,36 @@ namespace iroha {
                 if (signatories) {
                   return expected::makeValue(*signatories);
                 }
-                return expected::makeError(
+                return expected::makeError(validation::CommandNameAndError{
+                    "Initial transaction verification: could not fetch "
+                    "signatories",
                     (boost::format("stateful validator error: could not fetch "
                                    "signatories of "
                                    "account %s")
                      % tx.creatorAccountId())
-                        .str());
+                        .str()});
               }
-              return expected::makeError(
+              return expected::makeError(validation::CommandNameAndError{
+                  "Initial transaction verification: not enough signatures",
                   (boost::format(
                        "stateful validator error: not enough "
                        "signatures in transaction; account's quorum %d, "
                        "transaction's "
                        "signatures amount %d")
                    % account->quorum() % boost::size(tx.signatures()))
-                      .str());
+                      .str()});
             } | [this, &tx](const auto &signatories)
-                          -> expected::Result<void, std::string> {
+                          -> expected::Result<void,
+                                              validation::CommandNameAndError> {
               // Check if signatures in transaction are in account
               // signatory
               if (signaturesSubset(tx.signatures(), signatories)) {
                 return {};
               }
-              return expected::makeError(
-                  this->formSignaturesErrorMsg(tx.signatures(), signatories));
+              return expected::makeError(validation::CommandNameAndError{
+                  "Initial transaction verification: signatures are not "
+                  "account's signatories",
+                  this->formSignaturesErrorMsg(tx.signatures(), signatories)});
             });
       };
 
@@ -100,13 +107,14 @@ namespace iroha {
                      checking_transaction,
                      &transactions_errors_log](auto &tx) {
         return temporaryWsv.apply(tx, checking_transaction)
-            .match([](expected::Value<void> &) { return true; },
-                   [&transactions_errors_log,
-                    &tx](expected::Error<std::string> &error) {
-                     transactions_errors_log.push_back(
-                         std::make_pair(error.error, tx.hash()));
-                     return false;
-                   });
+            .match(
+                [](expected::Value<void> &) { return true; },
+                [&transactions_errors_log,
+                 &tx](expected::Error<validation::CommandNameAndError> &error) {
+                  transactions_errors_log.push_back(
+                      std::make_pair(error.error, tx.hash()));
+                  return false;
+                });
       };
 
       // TODO: kamilsa IR-1010 20.02.2018 rework validation logic, so that this
