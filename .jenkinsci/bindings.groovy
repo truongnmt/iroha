@@ -43,7 +43,6 @@ def doPythonBindings(os, buildType=Release) {
     [currentPath, env.PBVersion, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   def cmakeOptions = ""
   if (os == 'windows') {
-    sh "call source activate py3.5"
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
@@ -101,7 +100,6 @@ def doPythonBindings(os, buildType=Release) {
   else {
     sh "cp $artifactsPath /tmp/bindings-artifact"
   }
-  sh "source deactivate"
   doPythonWheels(os, buildType);
   return artifactsPath
 }
@@ -145,7 +143,7 @@ def doPythonWheels(os, buildType) {
     version = "develop"
     repo = "develop"
   }
-  if (env.nightly) { 
+  if (env.nightly == true) { 
     version += "-nightly"
     repo += "-nightly"
   }
