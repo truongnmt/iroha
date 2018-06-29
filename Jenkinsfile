@@ -389,7 +389,58 @@ pipeline {
         expression { return params.bindings }
       }
       parallel {
-        stage('Linux bindings') {
+        stage('linux_release') {
+          when {
+            beforeAgent true
+            anyOf {
+              allOf {
+                expression { return params.x86_64_linux }
+                expression { return params.build_type == 'Debug' }
+                expression { return env.GIT_LOCAL_BRANCH ==~ /(develop|master|trunk)/ }
+              }
+              expression { return MERGE_CONDITIONS_SATISFIED == "true" }
+            }
+          }
+          agent { label 'x86_64_aws_build' }
+          steps {
+            script {
+              def releaseBuild = load '.jenkinsci/release-build.groovy'
+              releaseBuild.doReleaseBuild()
+            }
+          }
+          post {
+            success {
+              script {
+                if (params.build_type == 'Release') {
+                  def post = load ".jenkinsci/post-step.groovy"
+                  post.postStep()
+                }
+              }
+            }
+          }
+        }
+        stage('docs') {
+          when {
+            beforeAgent true
+            anyOf {
+              expression { return params.Doxygen }
+              expression { return REST_PR_CONDITIONS_SATISFIED == "true" }
+            }
+          }
+          agent { label 'x86_64_aws_docs' }
+          steps {
+            script {
+              def doxygen = load ".jenkinsci/doxygen.groovy"
+              sh "docker load -i ${JENKINS_DOCKER_IMAGE_DIR}/${DOCKER_IMAGE_FILE}"
+              def iC = docker.image("${DOCKER_AGENT_IMAGE}")
+              iC.inside {
+                def scmVars = checkout scm
+                doxygen.doDoxygen()
+              }
+            }
+          }
+        }
+        stage('bindings') {
           when {
             beforeAgent true
             expression { return params.x86_64_linux }
