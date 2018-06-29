@@ -46,6 +46,7 @@ def doPythonBindings(os, buildType=Release) {
     [currentPath, env.PBVersion, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   def cmakeOptions = ""
   if (os == 'windows') {
+    sh "call source activate py3.5"
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
@@ -84,7 +85,7 @@ def doPythonBindings(os, buildType=Release) {
         --python_out=build/bindings shared_model/schema/*.proto
     """
     sh """
-      ${env.PBVersion} -m grpc_tools.protoc \
+      python -m grpc_tools.protoc \
         --proto_path=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/buildtrees/protobuf/src/protobuf-3.5.1-win32/include \
         --proto_path=shared_model/schema --python_out=build/bindings --grpc_python_out=build/bindings \
         shared_model/schema/endpoint.proto
@@ -101,6 +102,7 @@ def doPythonBindings(os, buildType=Release) {
   else {
     sh "cp $artifactsPath /tmp/bindings-artifact"
   }
+  sh "source deactivate"
   doPythonWheels(os, buildType);
   return artifactsPath
 }
@@ -133,27 +135,38 @@ def doAndroidBindings(abiVersion) {
 }
 
 def doPythonWheels(os, buildType) {
-  def envs = "py3.5"
-  def repo = "develop"
-  def wheelPath="wheels"
-  if (env.PBVersion == "python2") { envs = "py2.7" }
-  if (env.GIT_LOCAL_BRANCH == "master") { repo = "release"}
-  if (env.nightly) { repo += "-nightly"}
-  def version = "${repo}-${env.GIT_COMMIT.substring(0,8)}"
+  def version;
+  def repo;
+  def envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5"
+  if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
+    version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
+    repo = "release"
+  }
+  else {
+    version = "develop"
+    repo = "develop"
+  }
+  if (env.nightly) { 
+    version += "-nightly"
+    repo += "-nightly"
+  }
+  if(env.GIT_LOCAL_BRANCH == "develop") { version +="-${env.GIT_COMMIT.substring(0,8)}" }
+
   sh """
-    mkdir -p $wheelPath/iroha; \
-    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} $wheelPath/iroha &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/setup.{py,cfg} $wheelPath; \
-    cp .jenkinsci/python_bindings/files/__init__.py $wheelPath/iroha/; \
-    sed -i 's/{{ PYPI_VERSION }}/$version/' $wheelPath/setup.py; \
+    mkdir -p wheels/iroha; \
+    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
+    cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels; \
+    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
+    sed -i 's/{{ PYPI_VERSION }}/$version/' wheels/setup.py; \
+    modules=(block_pb2 commands_pb2 endpoint_pb2 endpoint_pb2_grpc iroha loader_pb2 loader_pb2_grpc ordering_pb2 ordering_pb2_grpc primitive_pb2 queries_pb2 responses_pb2 yac_pb2 yac_pb2_grpc); \
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i -E "s/import \$m/from . import \$m/g" \$f; done; done; \
     source activate $envs; \
-    pip wheel --no-deps $wheelPath/; \
+    pip wheel --no-deps wheels/; \
     source deactivate;
   """
-  sh "echo $buildType";
-  if ($buildType == "Release")
+  if (env.PBBuildType == "Release")
     withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-      sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi/ *.whl"
+      sh "twine upload --skip-existing -u $CI_NEXUS_USERNAME -p $CI_NEXUS_PASSWORD --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
     }
 }
 return this
