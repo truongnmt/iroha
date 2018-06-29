@@ -143,12 +143,12 @@ def doPythonWheels(os, buildType) {
   else {
     version = "develop"
     repo = "develop"
+    if (env.nightly == true) {
+      version += "-nightly"
+      repo += "-nightly"
+     }
+    version +="-${env.GIT_COMMIT.substring(0,8)}"
   }
-  if (env.nightly == true) { 
-    version += "-nightly"
-    repo += "-nightly"
-  }
-  if(env.GIT_LOCAL_BRANCH == "develop") { version +="-${env.GIT_COMMIT.substring(0,8)}" }
 
   sh """
     mkdir -p wheels/iroha; \
