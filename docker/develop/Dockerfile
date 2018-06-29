@@ -250,8 +250,8 @@ RUN set -e; \
 
 # python bindings dependencies
 RUN set -e; \
-    pip install grpcio_tools; \
-    pip3 install grpcio_tools
+    pip2 install --upgrade pip setuptools wheel grpcio_tools twine; \
+    pip3 install --upgrade pip setuptools wheel grpcio_tools twine;
 
 # install lcov
 RUN set -e; \
