@@ -12,7 +12,6 @@ Now our packages are distributed only for ``Windows x86_64`` with ``Python 2.7.x
 https://nexus.soramitsu.co.jp/repository/pypi-dev/ - developer wheels
 https://nexus.soramitsu.co.jp/repository/pypi-release/ - release wheels
 https://nexus.soramitsu.co.jp/repository/pypi-dev-nightly/ - dev nightly wheels
-https://nexus.soramitsu.co.jp/repository/pypi-release-nightly/ - release nightly wheels
 
 
 Pulling from PyPI
@@ -22,7 +21,7 @@ You can download our PyPI package from our Nexus server (instead of pypi.org). T
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-{develop,release,develop-nightly,release-nightly}/ iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-{develop,release,develop-nightly}/ iroha 
 
 Pushing to PyPI
 ---------------
@@ -31,7 +30,7 @@ This method allows pushing to repo (only for contributors). Twine package is req
 
 .. code-block:: shell
 
-    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-{develop,release,develop-nightly,release-nightly}/ /path/to/iroha/wheel/iroha.whl
+    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-{develop,release,develop-nightly}/ /path/to/iroha/wheel/iroha.whl
 
 Adding iroha PyPI repositories
 ---------------
