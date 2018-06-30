@@ -29,6 +29,33 @@
 namespace iroha {
   namespace validation {
 
+    /**
+     * Forms a readable error string from transaction signatures and account
+     * signatories
+     * @param signatures of the transaction
+     * @param signatories of the transaction creator
+     * @return well-formed error string
+     */
+    static std::string formSignaturesErrorMsg(
+        const shared_model::interface::types::SignatureRangeType &signatures,
+        const std::vector<shared_model::interface::types::PubkeyType>
+        &signatories) {
+      std::string signatures_string, signatories_string;
+      for (const auto &signature : signatures) {
+        signatures_string.append(signature.publicKey().toString().append("\n"));
+      }
+      for (const auto &signatory : signatories) {
+        signatories_string.append(signatory.toString().append("\n"));
+      }
+      return (boost::format(
+          "stateful validator error: signatures in transaction are not "
+          "account signatories:\n"
+          "signatures' public keys: %s\n"
+          "signatories: %s")
+          % signatures_string % signatories_string)
+          .str();
+    }
+
     StatefulValidatorImpl::StatefulValidatorImpl() {
       log_ = logger::log("SFV");
     }
@@ -38,7 +65,7 @@ namespace iroha {
         ametsuchi::TemporaryWsv &temporaryWsv) {
       log_->info("transactions in proposal: {}",
                  proposal.transactions().size());
-      auto checking_transaction = [this](const auto &tx, auto &queries) {
+      auto checking_transaction = [](const auto &tx, auto &queries) {
         return expected::Result<void, validation::CommandNameAndError>(
             [&]() -> expected::Result<
                          std::shared_ptr<shared_model::interface::Account>,
@@ -86,7 +113,7 @@ namespace iroha {
                        "signatures amount %d")
                    % account->quorum() % boost::size(tx.signatures()))
                       .str()});
-            } | [this, &tx](const auto &signatories)
+            } | [&tx](const auto &signatories)
                           -> expected::Result<void,
                                               validation::CommandNameAndError> {
               // Check if signatures in transaction are in account
@@ -97,7 +124,7 @@ namespace iroha {
               return expected::makeError(validation::CommandNameAndError{
                   "Initial transaction verification: signatures are not "
                   "account's signatories",
-                  this->formSignaturesErrorMsg(tx.signatures(), signatories)});
+                  formSignaturesErrorMsg(tx.signatures(), signatories)});
             });
       };
 
@@ -140,24 +167,5 @@ namespace iroha {
                             transactions_errors_log);
     }
 
-    std::string StatefulValidatorImpl::formSignaturesErrorMsg(
-        const shared_model::interface::types::SignatureRangeType &signatures,
-        const std::vector<shared_model::interface::types::PubkeyType>
-            &signatories) {
-      std::string signatures_string, signatories_string;
-      for (const auto &signature : signatures) {
-        signatures_string.append(signature.publicKey().toString().append("\n"));
-      }
-      for (const auto &signatory : signatories) {
-        signatories_string.append(signatory.toString().append("\n"));
-      }
-      return (boost::format(
-                  "stateful validator error: signatures in transaction are not "
-                  "account signatories:\n"
-                  "signatures' public keys: %s\n"
-                  "signatories: %s")
-              % signatures_string % signatories_string)
-          .str();
-    }
   }  // namespace validation
 }  // namespace iroha

@@ -61,19 +61,17 @@ namespace iroha {
                           % command_index % error.toString())
                              .str()};
                    })
-            | [this, command_index, &command] {
-                // Execute commands
-                return expected::map_error<validation::CommandNameAndError>(
-                    boost::apply_visitor(*command_executor_, command.get()),
-                    [command_index](CommandError &error) {
-                      return validation::CommandNameAndError{
-                          error.command_name,
-                          (boost::format("stateful validation error: could not "
-                                         "execute command with index %d: %s")
-                           % command_index % error.toString())
-                              .str()};
-                    });
-              };
+            // Execute commands
+            .and_res(expected::map_error<validation::CommandNameAndError>(
+                boost::apply_visitor(*command_executor_, command.get()),
+                [command_index](CommandError &error) {
+                  return validation::CommandNameAndError{
+                      error.command_name,
+                      (boost::format("stateful validation error: could not "
+                                     "execute command with index %d: %s")
+                       % command_index % error.toString())
+                          .str()};
+                }));
       };
 
       transaction_->exec("SAVEPOINT savepoint_;");
