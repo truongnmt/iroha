@@ -1,14 +1,15 @@
 properties([parameters([
-  booleanParam(defaultValue: true, description: '', name: 'x86_64_linux'),
-  booleanParam(defaultValue: false, description: '', name: 'armv7_linux'),
-  booleanParam(defaultValue: false, description: '', name: 'armv8_linux'),
-  booleanParam(defaultValue: false, description: '', name: 'x86_64_macos'),
-  booleanParam(defaultValue: false, description: '', name: 'x86_64_win'),
+  booleanParam(defaultValue: true, description: 'Build iroha', name: 'iroha'),
+  booleanParam(defaultValue: false, description: 'Build iroha for ARMv7', name: 'armv7_linux'),
+  booleanParam(defaultValue: false, description: 'Build iroha for ARMv8', name: 'armv8_linux'),
+  booleanParam(defaultValue: false, description: 'Build iroha for MacOS', name: 'x86_64_macos'),
   booleanParam(defaultValue: false, description: 'Build coverage', name: 'coverage'),
   booleanParam(defaultValue: false, description: 'Merge this PR to target after success build', name: 'merge_pr'),
   booleanParam(defaultValue: false, description: 'Scheduled nightly build', name: 'nightly'),
   choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'build_type'),
   booleanParam(defaultValue: false, description: 'Build `bindings`', name: 'bindings'),
+  booleanParam(defaultValue: true, description: 'Build bindings for Linux OS', name: 'x86_64_linux'),
+  booleanParam(defaultValue: false, description: 'Build bindings for Windows OS', name: 'x86_64_win'),
   booleanParam(defaultValue: false, description: 'Build Java bindings', name: 'JavaBindings'),
   choice(choices: 'Release\nDebug', description: 'Java bindings build type', name: 'JBBuildType'),
   booleanParam(defaultValue: false, description: 'Build Python bindings', name: 'PythonBindings'),
@@ -73,7 +74,7 @@ pipeline {
           when {
             beforeAgent true
             anyOf {
-              expression { return params.x86_64_linux }
+              expression { return params.iroha }
               expression { return MERGE_CONDITIONS_SATISFIED == "true" }
             }
           }
@@ -233,7 +234,7 @@ pipeline {
           when {
             beforeAgent true
             anyOf {
-              expression { return params.x86_64_linux }
+              expression { return params.iroha }
               expression { return MERGE_CONDITIONS_SATISFIED == "true" }
             }
           }
@@ -378,7 +379,7 @@ pipeline {
             beforeAgent true
             anyOf {
               allOf {
-                expression { return params.x86_64_linux }
+                expression { return params.iroha }
                 expression { return params.build_type == 'Debug' }
                 expression { return env.GIT_LOCAL_BRANCH ==~ /(develop|master|trunk)/ }
               }
@@ -429,7 +430,10 @@ pipeline {
           when {
             beforeAgent true
             anyOf {
-              expression { return params.bindings }
+              allOf {
+                expression { return params.bindings }
+                expression { return params.x86_64_linux }
+              }
               expression { return REST_PR_CONDITIONS_SATISFIED == "true" }
             }
           }
@@ -504,7 +508,10 @@ pipeline {
           when {
             beforeAgent true
             anyOf {
-              expression { return params.x86_64_win }
+              allOf {
+                expression { return params.bindings }
+                expression { return params.x86_64_win }
+              }
               expression { return REST_PR_CONDITIONS_SATISFIED == "true" }
             }
           }
@@ -535,6 +542,9 @@ pipeline {
                 }
               }
             }
+            cleanup {
+              cleanWs()
+            }
           }
         }
       }
@@ -564,7 +574,7 @@ pipeline {
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
-        if (params.x86_64_linux || params.merge_pr) {
+        if (params.iroha || params.merge_pr) {
           node ('x86_64_aws_test') {
             post.cleanUp()
           }
@@ -584,11 +594,6 @@ pipeline {
         if (params.x86_64_macos || params.merge_pr) {
           node ('mac') {
             post.macCleanUp()
-          }
-        }
-        if (params.x86_64_win || params.merge_pr) {
-          node ('win') {
-            post.cleanUp()
           }
         }
       }

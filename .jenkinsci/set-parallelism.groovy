@@ -4,7 +4,7 @@ def setParallelism(defaultParameter) {
   if (!defaultParameter) {
     return 4
   }
-  if (env.NODE_NAME.contains('arm7')) {
+  if (env.NODE_NAME.contains('armv7')) {
     return 1
   }
   if (env.NODE_NAME.contains('mac')) {
