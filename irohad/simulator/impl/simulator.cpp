@@ -95,7 +95,7 @@ namespace iroha {
                   &temporaryStorage) {
             auto validated_proposal_and_errors =
                 validator_->validate(proposal, *temporaryStorage.value);
-            // Temporary variant: errors are lost now, but then they are going
+            // Temporary variant; errors are lost now, but then they are going
             // to be handled upwards
             notifier_.get_subscriber().on_next(
                 validated_proposal_and_errors.first);
