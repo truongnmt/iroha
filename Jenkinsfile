@@ -49,6 +49,7 @@ pipeline {
 
   options {
     buildDiscarder(logRotator(numToKeepStr: '20'))
+    timeout(time: 3, unit: 'HOURS')
     timestamps()
   }
 
@@ -174,6 +175,7 @@ pipeline {
               expression { return INITIAL_COMMIT_PR == "true" }
               expression { return MERGE_CONDITIONS_SATISFIED == "true" }
               expression { return params.x86_64_macos }
+              expression { return params.nightly }
             }
           }
           agent { label 'mac' }
@@ -209,6 +211,7 @@ pipeline {
           expression { params.coverage }  // by request
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
+          expression { return params.nightly }
           allOf {
             expression { return params.build_type == 'Debug' }
             expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
@@ -315,6 +318,7 @@ pipeline {
               expression { return INITIAL_COMMIT_PR == "false" }
               expression { return MERGE_CONDITIONS_SATISFIED == "false" }
               expression { return params.x86_64_macos }
+              expression { return params.nightly }
             }
           }
           agent { label 'mac' }
@@ -341,6 +345,7 @@ pipeline {
         beforeAgent true
         anyOf {
           expression { params.coverage }  // by request
+          expression { return params.nightly }
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
           allOf {
@@ -574,7 +579,7 @@ pipeline {
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
-        if (params.iroha || params.merge_pr) {
+        if (params.iroha || params.merge_pr || params.nightly) {
           node ('x86_64_aws_test') {
             post.cleanUp()
           }
@@ -591,7 +596,7 @@ pipeline {
             clean.doDockerCleanup()
           }
         }
-        if (params.x86_64_macos || params.merge_pr) {
+        if (params.x86_64_macos || params.merge_pr || params.nightly) {
           node ('mac') {
             post.macCleanUp()
           }
