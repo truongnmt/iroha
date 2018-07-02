@@ -1,5 +1,4 @@
 pipeline {
-  environment {}
 
   options {
     buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -10,10 +9,14 @@ pipeline {
   agent any
   stages {
   	stage('first') {
-  		agent { label 'master' }
+  		agent { label 'aws_build' }
   		steps {
   			script {
   				sh "env"
+  				sh "mkdir -p /var/j2"
+  				sh "cp -r ${JENKINS_HOME} /var/j2"
+  				JENKINS_HOME = /var/j2
+  				sh "echo test"
   			}
   		}
   	}
