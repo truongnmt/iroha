@@ -1,15 +1,13 @@
 properties([parameters([
   booleanParam(defaultValue: true, description: 'Build iroha', name: 'iroha'),
-  booleanParam(defaultValue: false, description: 'Build iroha for ARMv7', name: 'armv7_linux'),
-  booleanParam(defaultValue: false, description: 'Build iroha for ARMv8', name: 'armv8_linux'),
-  booleanParam(defaultValue: false, description: 'Build iroha for MacOS', name: 'x86_64_macos'),
-  booleanParam(defaultValue: false, description: 'Build coverage', name: 'coverage'),
-  booleanParam(defaultValue: false, description: 'Merge this PR to target after success build', name: 'merge_pr'),
-  booleanParam(defaultValue: false, description: 'Scheduled nightly build', name: 'nightly'),
-  choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'build_type'),
   booleanParam(defaultValue: false, description: 'Build `bindings`', name: 'bindings'),
-  booleanParam(defaultValue: true, description: 'Build bindings for Linux OS', name: 'x86_64_linux'),
-  booleanParam(defaultValue: false, description: 'Build bindings for Windows OS', name: 'x86_64_win'),
+  booleanParam(defaultValue: true, description: 'Build for x86_64 Linux OS', name: 'x86_64_linux'),
+  booleanParam(defaultValue: false, description: 'Build for x86_64 Windows OS', name: 'x86_64_win'),
+  booleanParam(defaultValue: false, description: 'Build for ARMv7', name: 'armv7_linux'),
+  booleanParam(defaultValue: false, description: 'Build for ARMv8', name: 'armv8_linux'),
+  booleanParam(defaultValue: false, description: 'Build for MacOS platform', name: 'x86_64_macos'),
+  choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'build_type'),
+  booleanParam(defaultValue: false, description: 'Merge this PR to target branch after success build', name: 'merge_pr'),
   booleanParam(defaultValue: false, description: 'Build Java bindings', name: 'JavaBindings'),
   choice(choices: 'Release\nDebug', description: 'Java bindings build type', name: 'JBBuildType'),
   booleanParam(defaultValue: false, description: 'Build Python bindings', name: 'PythonBindings'),
@@ -19,7 +17,9 @@ properties([parameters([
   choice(choices: '26\n25\n24\n23\n22\n21\n20\n19\n18\n17\n16\n15\n14', description: 'Android Bindings ABI Version', name: 'ABABIVersion'),
   choice(choices: 'Release\nDebug', description: 'Android bindings build type', name: 'ABBuildType'),
   choice(choices: 'arm64-v8a\narmeabi-v7a\narmeabi\nx86_64\nx86', description: 'Android bindings platform', name: 'ABPlatform'),
+  booleanParam(defaultValue: false, description: 'Build coverage', name: 'coverage'),
   booleanParam(defaultValue: false, description: 'Build docs', name: 'Doxygen'),
+  booleanParam(defaultValue: false, description: 'Scheduled nightly build. Ignored by regular builds', name: 'nightly'),
   string(defaultValue: '4', description: 'How much parallelism should we exploit. "4" is optimal for machines with modest amount of memory and at least 4 cores', name: 'PARALLELISM')])])
 
 pipeline {
@@ -70,14 +70,18 @@ pipeline {
       }
     }
     stage('Build') {
+      when {
+        beforeAgent true
+        anyOf {
+          expression { return params.iroha }
+          expression { return MERGE_CONDITIONS_SATISFIED == "true" }
+        }
+      }
       parallel {
         stage ('x86_64_linux') {
           when {
             beforeAgent true
-            anyOf {
-              expression { return params.iroha }
-              expression { return MERGE_CONDITIONS_SATISFIED == "true" }
-            }
+            expression { return params.x86_64_linux}
           }
           agent { label 'x86_64_aws_build' }
           steps {
@@ -175,7 +179,6 @@ pipeline {
               expression { return INITIAL_COMMIT_PR == "true" }
               expression { return MERGE_CONDITIONS_SATISFIED == "true" }
               expression { return params.x86_64_macos }
-              expression { return params.nightly }
             }
           }
           agent { label 'mac' }
@@ -211,7 +214,6 @@ pipeline {
           expression { params.coverage }  // by request
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
-          expression { return params.nightly }
           allOf {
             expression { return params.build_type == 'Debug' }
             expression { return env.GIT_LOCAL_BRANCH ==~ /master/ }
@@ -230,6 +232,7 @@ pipeline {
     stage('Tests') {
       when {
         beforeAgent true
+        expression { return params.iroha }
         expression { return params.build_type == "Debug" }
       }
       parallel {
@@ -318,7 +321,6 @@ pipeline {
               expression { return INITIAL_COMMIT_PR == "false" }
               expression { return MERGE_CONDITIONS_SATISFIED == "false" }
               expression { return params.x86_64_macos }
-              expression { return params.nightly }
             }
           }
           agent { label 'mac' }
@@ -345,7 +347,6 @@ pipeline {
         beforeAgent true
         anyOf {
           expression { params.coverage }  // by request
-          expression { return params.nightly }
           expression { return INITIAL_COMMIT_PR == "true" }
           expression { return MERGE_CONDITIONS_SATISFIED == "true" }
           allOf {
@@ -548,6 +549,7 @@ pipeline {
               }
             }
             cleanup {
+              sh "rm -rf /tmp/${env.GIT_COMMIT}"
               cleanWs()
             }
           }
@@ -579,7 +581,7 @@ pipeline {
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
-        if (params.iroha || params.merge_pr || params.nightly) {
+        if (params.iroha || params.merge_pr) {
           node ('x86_64_aws_test') {
             post.cleanUp()
           }
@@ -596,7 +598,7 @@ pipeline {
             clean.doDockerCleanup()
           }
         }
-        if (params.x86_64_macos || params.merge_pr || params.nightly) {
+        if (params.x86_64_macos || params.merge_pr) {
           node ('mac') {
             post.macCleanUp()
           }
