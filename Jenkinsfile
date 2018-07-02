@@ -13,7 +13,7 @@ pipeline {
   		steps {
   			script {
   				sh "env"
-  				sh "mkdir -p /var/j2"
+  				sh "sudo mkdir -p /var/j2 && sudo chown -R ubuntu.ubuntu /var/j2"
   				sh "cp -r ${JENKINS_HOME} /var/j2"
   				JENKINS_HOME = /var/j2
   				sh "echo test"
