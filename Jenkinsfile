@@ -581,7 +581,7 @@ pipeline {
         def notify = load ".jenkinsci/notifications.groovy"
         notify.notifyBuildResults()
 
-        if (params.iroha || params.merge_pr) {
+        if (params.iroha && params.x86_64_linux || params.merge_pr) {
           node ('x86_64_aws_test') {
             post.cleanUp()
           }
