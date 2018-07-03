@@ -95,11 +95,11 @@ namespace shared_model {
       template <typename T>
       using Lazy = detail::LazyInitializer<T>;
 
-      const iroha::protocol::Transaction::Payload &payload_{proto_->payload()};
+      iroha::protocol::Transaction::Payload &payload_{*proto_->mutable_payload()};
 
       const Lazy<std::vector<proto::Command>> commands_{[this] {
-        return std::vector<proto::Command>(payload_.commands().begin(),
-                                           payload_.commands().end());
+        return std::vector<proto::Command>(payload_.mutable_commands()->begin(),
+                                           payload_.mutable_commands()->end());
       }};
 
       const Lazy<interface::types::BlobType> blob_{

@@ -113,12 +113,12 @@ namespace shared_model {
         return reason;
       }
 
-      ReasonsGroupType operator()(const interface::CreateRole &cr) const {
+      ReasonsGroupType operator()(interface::CreateRole &cr) const {
         ReasonsGroupType reason;
         addInvalidCommand(reason, "CreateRole");
 
         validator_.validateRoleId(reason, cr.roleName());
-        for (auto i : static_cast<const shared_model::proto::CreateRole &>(cr)
+        for (auto i : static_cast<shared_model::proto::CreateRole &>(cr)
                           .getTransport()
                           .create_role()
                           .permissions()) {

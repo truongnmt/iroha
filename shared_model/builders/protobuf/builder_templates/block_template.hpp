@@ -83,9 +83,9 @@ namespace shared_model {
           : stateless_validator_(validator){};
 
       template <class T>
-      auto transactions(const T &transactions) const {
+      auto transactions(T &transactions) const {
         return transform<Transactions>([&](auto &block) {
-          for (const auto &tx : transactions) {
+          for (auto &tx : transactions) {
             new (block.mutable_payload()->add_transactions())
                 iroha::protocol::Transaction(tx.getTransport());
           }

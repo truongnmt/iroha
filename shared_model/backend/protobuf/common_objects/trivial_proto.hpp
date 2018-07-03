@@ -66,7 +66,7 @@ namespace shared_model {
 
       using TransportType = Proto;
 
-      const Proto &getTransport() const {
+      Proto &getTransport() {
         return *proto_;
       }
 
