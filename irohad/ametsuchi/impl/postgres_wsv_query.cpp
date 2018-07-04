@@ -136,8 +136,8 @@ namespace iroha {
               "SELECT json_build_object("
                 + transaction_.quote(writer) + ", json_build_object("
                   + transaction_.quote(key) + ", ("
-                    "SELECT data #>> '{" + transaction_.quote(writer)
-                      + ", " + transaction_.quote(key) + "}' "
+                    "SELECT data #>> '{\"" + writer + "\""
+                      + ", \"" + key + "\"}' "
                     "FROM account "
                     "WHERE account_id = " + transaction_.quote(account_id)
                   + ")));");
@@ -163,11 +163,12 @@ namespace iroha {
                 "FROM jsonb_each(("
                   "SELECT data "
                   "FROM account "
-                  "WHERE account_id = " + transaction_.quote(writer) + ")) kv "
+                  "WHERE account_id = "
+                    + transaction_.quote(account_id) + ")) kv "
               "WHERE kv.value ? " + transaction_.quote(key) + ") "
               "AS jsons, json_each(json_build_object);");
         }
-      } | [&](const auto &result) -> boost::optional<std::string> {
+      }() | [&](const auto &result) -> boost::optional<std::string> {
         if (result.empty()) {
           // result will be empty iff account id is not found
           log_->info(kAccountNotFound, account_id);

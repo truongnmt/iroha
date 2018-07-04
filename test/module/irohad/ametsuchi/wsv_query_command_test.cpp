@@ -233,7 +233,7 @@ namespace iroha {
      * @then getAccountDetail will return nullopt
      */
     TEST_F(AccountTest, GetAccountDetailInvalidWhenNotFound) {
-      EXPECT_FALSE(query->getAccountDetail("invalid account id"));
+      EXPECT_FALSE(query->getAccountDetail("invalid account id", "", ""));
     }
 
     /**
@@ -246,10 +246,10 @@ namespace iroha {
       ASSERT_TRUE(val(command->setAccountKV(
           account->accountId(), account->accountId(), "some_key", "some_val")));
 
-      auto acc_details = query->getAccountDetail(account->accountId());
+      auto acc_details = query->getAccountDetail(account->accountId(), "", "");
       ASSERT_TRUE(acc_details);
-      ASSERT_EQ(R"({"id@domain": {"some_key": "some_val", "key": "value"}})",
-                acc_details->data());
+      ASSERT_EQ(R"({"id@domain": {"key": "value", "some_key": "some_val"}})",
+                *acc_details);
     }
 
     /**
@@ -271,12 +271,12 @@ namespace iroha {
           account->accountId(), "admin", "some_key", "even_third_val")));
 
       auto acc_details =
-          query->getAccountDetail(account->accountId(), "some_key");
+          query->getAccountDetail(account->accountId(), "some_key", "");
       ASSERT_TRUE(acc_details);
       ASSERT_EQ(
-          R"({"id@domain": {"some_key": "some_val"},
-              "admin": {"some_key": even_third_val"}})",
-          acc_details->data());
+          "{ \"admin\" : {\"some_key\" : \"even_third_val\"}, "
+            "\"id@domain\" : {\"some_key\" : \"some_val\"} }",
+          *acc_details);
     }
 
     /**
@@ -295,8 +295,8 @@ namespace iroha {
       auto acc_details =
           query->getAccountDetail(account->accountId(), "", "admin");
       ASSERT_TRUE(acc_details);
-      ASSERT_EQ(R"({"admin": {"another_key": "another_val"}})"),
-          acc_details->data();
+      ASSERT_EQ(R"({"admin" : {"another_key": "another_val"}})",
+                *acc_details);
     }
 
     /**
@@ -321,7 +321,8 @@ namespace iroha {
       auto acc_details = query->getAccountDetail(
           account->accountId(), "some_key", account->accountId());
       ASSERT_TRUE(acc_details);
-      ASSERT_EQ(R"({"id@domain": {"some_key": "some_val"}})");
+      ASSERT_EQ(R"({"id@domain" : {"some_key" : "some_val"}})",
+                *acc_details);
     }
 
     class AccountRoleTest : public WsvQueryCommandTest {
