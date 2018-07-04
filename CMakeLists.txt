@@ -137,3 +137,5 @@ if (FUZZING)
     message(Fuzzing with compilers other than clang does not supported yet)
   endif()
 endif()
+
+add_definitions(-DBOOST_NO_RTTI)

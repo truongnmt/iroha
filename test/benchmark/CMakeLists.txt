@@ -12,14 +12,14 @@ target_link_libraries(benchmark_example
     shared_model_stateless_validation
     )
 
-add_executable(proto_creation_benchmark
-        proto_creation_benchmark.cpp
+add_executable(bm_proto_creation
+        bm_proto_creation.cpp
         )
 
-target_include_directories(proto_creation_benchmark PUBLIC
+target_include_directories(bm_proto_creation PUBLIC
         ${PROJECT_SOURCE_DIR}/test)
 
-target_link_libraries(proto_creation_benchmark
+target_link_libraries(bm_proto_creation
         benchmark
         shared_model_proto_backend
         shared_model_proto_builders
