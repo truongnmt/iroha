@@ -75,9 +75,9 @@ namespace shared_model {
       }
 
       template <class T>
-      auto transactions(const T &transactions) const {
+      auto transactions(T &transactions) const {
         return transform<Transactions>([&](auto &proposal) {
-          for (const auto &tx : transactions) {
+          for (auto &tx : transactions) {
             new (proposal.add_transactions())
                 iroha::protocol::Transaction(tx.getTransport());
           }

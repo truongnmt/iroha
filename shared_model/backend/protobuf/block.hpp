@@ -107,8 +107,9 @@ namespace shared_model {
       iroha::protocol::Block::Payload &payload_{*proto_->mutable_payload()};
 
       const Lazy<std::vector<proto::Transaction>> transactions_{[this] {
-        return std::vector<proto::Transaction>(payload_.mutable_transactions()->begin(),
-                                               payload_.mutable_transactions()->end());
+        return std::vector<proto::Transaction>(
+            payload_.mutable_transactions()->begin(),
+            payload_.mutable_transactions()->end());
       }};
 
       const Lazy<interface::types::BlobType> blob_{

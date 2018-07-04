@@ -61,8 +61,9 @@ namespace shared_model {
       using Lazy = detail::LazyInitializer<T>;
 
       const Lazy<std::vector<proto::Transaction>> transactions_{[this] {
-        return std::vector<proto::Transaction>(proto_->transactions().begin(),
-                                               proto_->transactions().end());
+        return std::vector<proto::Transaction>(
+            proto_->mutable_transactions()->begin(),
+            proto_->mutable_transactions()->end());
       }};
     };
   }  // namespace proto
