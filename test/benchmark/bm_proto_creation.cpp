@@ -10,7 +10,10 @@
  * which can be visibly slow.
  *
  * The purpose of this benchmark is to keep track of performance costs related
- * to blocks and proposals copying/moving
+ * to blocks and proposals copying/moving.
+ * 
+ * Each benchmark runs transaction() and commands() call to 
+ * initialize possibly lazy fields.
  */
 
 #include <benchmark/benchmark.h>
