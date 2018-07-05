@@ -11,12 +11,13 @@
  *
  * The purpose of this benchmark is to keep track of performance costs related
  * to blocks and proposals copying/moving.
- * 
- * Each benchmark runs transaction() and commands() call to 
+ *
+ * Each benchmark runs transaction() and commands() call to
  * initialize possibly lazy fields.
  */
-
+#define BOOST_NO_RTTI
 #include <benchmark/benchmark.h>
+#include <chrono>
 
 #include "backend/protobuf/block.hpp"
 #include "builders/protobuf/block.hpp"
@@ -35,7 +36,6 @@ class BlockBenchmark : public benchmark::Fixture {
   void SetUp(benchmark::State &st) override {
     TestBlockBuilder builder;
     TestTransactionBuilder txbuilder;
-
     auto base_tx = txbuilder.createdTime(iroha::time::now()).quorum(1);
 
     for (int i = 0; i < 5; i++) {
@@ -79,7 +79,7 @@ class ProposalBenchmark : public benchmark::Fixture {
   }
 };
 
-BENCHMARK_F(BlockBenchmark, CopyTest)(benchmark::State &st) {
+BENCHMARK_F(BlockBenchmark, TransportCopyTest)(benchmark::State &st) {
   auto block = complete_builder.build();
 
   while (st.KeepRunning()) {
@@ -91,17 +91,48 @@ BENCHMARK_F(BlockBenchmark, CopyTest)(benchmark::State &st) {
   }
 }
 
-BENCHMARK_F(BlockBenchmark, MoveTest)(benchmark::State &state) {
-  auto block = complete_builder.build();
+BENCHMARK_DEFINE_F(BlockBenchmark, TransportMoveTest)(benchmark::State &st) {
+  while (st.KeepRunning()) {
+    auto block = complete_builder.build();
+    iroha::protocol::Block proto_block = block.getTransport();
 
-  while (state.KeepRunning()) {
-    shared_model::proto::Block copy(std::move(block.getTransport()));
+    auto start = std::chrono::high_resolution_clock::now();
+    shared_model::proto::Block copy(std::move(proto_block));
 
     for (const auto &tx : copy.transactions()) {
       benchmark::DoNotOptimize(tx.commands());
     }
+    auto end   = std::chrono::high_resolution_clock::now();
+
+    auto elapsed_seconds =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+            end - start);
+
+    st.SetIterationTime(elapsed_seconds.count());
   }
 }
+
+BENCHMARK_DEFINE_F(BlockBenchmark, MoveTest)(benchmark::State &state) {
+  while (state.KeepRunning()) {
+    auto block = complete_builder.build();
+    auto start = std::chrono::high_resolution_clock::now();
+    shared_model::proto::Block copy = std::move(block);
+
+    for (const auto &tx : copy.transactions()) {
+      benchmark::DoNotOptimize(tx.commands());
+    }
+    auto end   = std::chrono::high_resolution_clock::now();
+
+    auto elapsed_seconds =
+        std::chrono::duration_cast<std::chrono::duration<double>>(
+            end - start);
+
+    state.SetIterationTime(elapsed_seconds.count());
+  }
+}
+
+BENCHMARK_REGISTER_F(BlockBenchmark, MoveTest)->UseManualTime();
+BENCHMARK_REGISTER_F(BlockBenchmark, TransportMoveTest)->UseManualTime();
 
 BENCHMARK_F(BlockBenchmark, CloneTest)(benchmark::State &st) {
   auto block = complete_builder.build();

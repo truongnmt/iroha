@@ -130,7 +130,7 @@ namespace torii {
                                     const shared_model::proto::BlockResponse &>(
                                     block_response);
                                 writer->Write(
-                                    proto_block_response.getImmutableTransport());
+                                    proto_block_response.getTransport());
                               },
                               [this, writer, request](
                                   const shared_model::interface::

@@ -28,6 +28,9 @@ namespace shared_model {
     /**
      * Class for holding built but still unsigned objects
      * @tparam T - type of object received from builder
+     *
+     * NOTE: finish() moves internal object, so it is unsafe to call it more
+     * than once on the single instance.
      */
     template <typename T>
     class UnsignedWrapper {
@@ -63,7 +66,7 @@ namespace shared_model {
         if (boost::size(object_.signatures()) == 0) {
           throw std::invalid_argument("Cannot get object without signatures");
         }
-        return object_;
+        return std::move(object_);
       }
 
       interface::types::HashType hash() {
