@@ -100,6 +100,18 @@ BENCHMARK_F(BlockBenchmark, MoveTest)(benchmark::State &state) {
   }
 }
 
+BENCHMARK_F(BlockBenchmark, CloneTest)(benchmark::State &st) {
+  auto block = complete_builder.build();
+
+  while (st.KeepRunning()) {
+    auto copy = clone(block);
+
+    for (const auto &tx : copy->transactions()) {
+      benchmark::DoNotOptimize(tx.commands());
+    }
+  }
+}
+
 BENCHMARK_F(ProposalBenchmark, CopyTest)(benchmark::State &st) {
   auto proposal = complete_builder.build();
 
@@ -119,6 +131,18 @@ BENCHMARK_F(ProposalBenchmark, MoveTest)(benchmark::State &state) {
     shared_model::proto::Proposal copy(std::move(proposal.getTransport()));
 
     for (const auto &tx : copy.transactions()) {
+      benchmark::DoNotOptimize(tx.commands());
+    }
+  }
+}
+
+BENCHMARK_F(ProposalBenchmark, CloneTest)(benchmark::State &st) {
+  auto proposal = complete_builder.build();
+
+  while (st.KeepRunning()) {
+    auto copy = clone(proposal);
+
+    for (const auto &tx : copy->transactions()) {
       benchmark::DoNotOptimize(tx.commands());
     }
   }
