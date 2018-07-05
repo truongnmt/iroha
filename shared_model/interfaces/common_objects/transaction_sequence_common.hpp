@@ -19,6 +19,9 @@ namespace shared_model {
           boost::any_range<Transaction,
                            boost::forward_traversal_tag,
                            const Transaction &>;
+
+    using SharedTxsCollectionType =
+    std::vector<std::shared_ptr<Transaction>>;
     }
   }  // namespace interface
 }  // namespace shared_model

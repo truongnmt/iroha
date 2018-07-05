@@ -13,7 +13,7 @@ namespace shared_model {
     template <typename TransactionValidator>
     iroha::expected::Result<TransactionSequence, std::string>
     TransactionSequence::createTransactionSequence(
-        const types::TransactionsForwardCollectionType &transactions,
+        const types::SharedTxsCollectionType &transactions,
         const validation::TransactionsCollectionValidator<TransactionValidator>
             &validator) {
       auto answer = validator.validate(transactions);
@@ -25,21 +25,45 @@ namespace shared_model {
 
     template iroha::expected::Result<TransactionSequence, std::string>
     TransactionSequence::createTransactionSequence(
-        const types::TransactionsForwardCollectionType &transactions,
+        const types::SharedTxsCollectionType &transactions,
         const validation::TransactionsCollectionValidator<
             validation::TransactionValidator<
                 validation::FieldValidator,
                 validation::CommandValidatorVisitor<
                     validation::FieldValidator>>> &validator);
 
-    types::TransactionsForwardCollectionType
+    types::SharedTxsCollectionType
     TransactionSequence::transactions() {
       return transactions_;
     }
 
     TransactionSequence::TransactionSequence(
-        const types::TransactionsForwardCollectionType &transactions)
-        : transactions_(transactions) {}
+        const types::SharedTxsCollectionType &transactions)
+        : transactions_(transactions) {
+      std::unordered_map<std::string, std::vector<std::shared_ptr<Transaction>>>
+          extracted_batches;
+      for (const auto &tx : transactions) {
+        if (auto meta = tx->batch_meta()) {
+          auto hashes = meta.get()->transactionHashes();
+          auto batch_hash = calculateBatchHash(hashes);
+          extracted_batches[batch_hash].push_back(tx);
+        } else {
+          batches_.push_back(std::vector<std::shared_ptr<Transaction>>{tx});
+        }
+      }
+      for (auto it : extracted_batches) {
+        batches_.push_back(it.second);
+      }
+    }
+
+    std::string TransactionSequence::calculateBatchHash(
+        std::vector<types::HashType> reduced_hashes) {
+      std::stringstream concatenated_hashes_stream;
+      for (const auto &hash : reduced_hashes) {
+        concatenated_hashes_stream << hash.hex();
+      }
+      return concatenated_hashes_stream.str();
+    }
 
   }  // namespace interface
 }  // namespace shared_model

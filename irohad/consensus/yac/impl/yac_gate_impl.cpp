@@ -82,7 +82,7 @@ namespace iroha {
             }
             // if node has voted for the committed block
             if (hash == current_block_.first) {
-              // append signatures of other nodes
+              // append signatures of otheronPreparedTransactions nodes
               this->copySignatures(commit_message);
               log_->info("consensus: commit top block: height {}, hash {}",
                          current_block_.second.height(),
