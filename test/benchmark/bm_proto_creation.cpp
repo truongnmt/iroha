@@ -131,9 +131,6 @@ BENCHMARK_DEFINE_F(BlockBenchmark, MoveTest)(benchmark::State &state) {
   }
 }
 
-BENCHMARK_REGISTER_F(BlockBenchmark, MoveTest)->UseManualTime();
-BENCHMARK_REGISTER_F(BlockBenchmark, TransportMoveTest)->UseManualTime();
-
 BENCHMARK_F(BlockBenchmark, CloneTest)(benchmark::State &st) {
   auto block = complete_builder.build();
 
@@ -181,5 +178,9 @@ BENCHMARK_F(ProposalBenchmark, CloneTest)(benchmark::State &st) {
     }
   }
 }
+
+
+BENCHMARK_REGISTER_F(BlockBenchmark, MoveTest)->UseManualTime();
+BENCHMARK_REGISTER_F(BlockBenchmark, TransportMoveTest)->UseManualTime();
 
 BENCHMARK_MAIN();
