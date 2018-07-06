@@ -16,7 +16,6 @@
  * initialize possibly lazy fields.
  */
 
-#define BOOST_NO_RTTI
 #include <benchmark/benchmark.h>
 
 #include "backend/protobuf/block.hpp"
