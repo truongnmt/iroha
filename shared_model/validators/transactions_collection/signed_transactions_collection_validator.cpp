@@ -9,6 +9,7 @@
 #include "validators/field_validator.hpp"
 #include "validators/transaction_validator.hpp"
 
+
 namespace shared_model {
   namespace validation {
 
@@ -43,6 +44,7 @@ namespace shared_model {
                              CommandValidatorVisitor<FieldValidator>>>::
         validate(const interface::types::TransactionsForwardCollectionType
                      &transactions) const;
+
 
   }  // namespace validation
 }  // namespace shared_model

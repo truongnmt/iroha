@@ -70,6 +70,14 @@ namespace shared_model {
         return object_.hash();
       }
 
+      template <typename U = T>
+      typename std::enable_if<
+          std::is_same<U, shared_model::proto::Transaction>::value,
+          interface::types::HashType>::type
+      reduced_hash() {
+        return object_.reduced_hash();
+      }
+
      private:
       T object_;
     };

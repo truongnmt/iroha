@@ -16,6 +16,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <interfaces/iroha_internal/transaction_sequence.hpp>
 
 #include "block.pb.h"
 #include "builders/protobuf/block.hpp"
@@ -24,9 +25,11 @@
 #include "builders/protobuf/proposal.hpp"
 #include "builders/protobuf/queries.hpp"
 #include "builders/protobuf/transaction.hpp"
+#include "builders/protobuf/transaction_sequence_builder.hpp"
 #include "builders/protobuf/transport_builder.hpp"
 #include "common/types.hpp"
 #include "framework/result_fixture.hpp"
+#include "interfaces/common_objects/types.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_empty_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
@@ -44,6 +47,7 @@ class TransportBuilderTest : public ::testing::Test {
     created_time = iroha::time::now();
     invalid_created_time = 123;
     account_id = "account@domain";
+    account_id2 = "acccount@domain";
     quorum = 2;
     counter = 1048576;
     hash = std::string(32, '0');
@@ -59,7 +63,10 @@ class TransportBuilderTest : public ::testing::Test {
         .quorum(quorum)
         .setAccountQuorum(account_id, quorum);
   }
-
+  auto createUnbuildTransaction() {
+    return getBaseTransactionBuilder<shared_model::proto::TransactionBuilder>()
+        .creatorAccountId(account_id);
+  }
   auto createTransaction() {
     return getBaseTransactionBuilder<shared_model::proto::TransactionBuilder>()
         .creatorAccountId(account_id)
@@ -189,6 +196,7 @@ class TransportBuilderTest : public ::testing::Test {
   decltype(iroha::time::now()) created_time;
   decltype(created_time) invalid_created_time;
   std::string account_id;
+  std::string account_id2;
   uint8_t quorum;
   uint64_t counter;
   std::string hash;
@@ -433,4 +441,64 @@ TEST_F(TransportBuilderTest, BlockVariantWithInvalidBlock) {
                        validation::DefaultAnyBlockValidator>()
           .build(block.getTransport()));
   ASSERT_TRUE(error);
+}
+
+//---------------------------Transaction Sequence-------------------------------
+
+/**
+ * @given empty range of transactions
+ * @when TransportBuilder tries to build TransactionSequence object
+ * @then built object contains TransactionSequence shared model object
+ * AND it containcs 0 transactions
+ */
+TEST_F(TransportBuilderTest, TransactionSequenceEmpty) {
+  std::vector<proto::Transaction> tr;
+  auto val = framework::expected::val(
+      TransportBuilder<interface::TransactionSequence,
+                       validation::SignedTransactionsCollectionValidator<
+                           validation::TransactionValidator<
+                               validation::FieldValidator,
+                               validation::CommandValidatorVisitor<
+                                   validation::FieldValidator>>>>()
+          .build(tr));
+  ASSERT_TRUE(val);
+  val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 0); };
+}
+
+/**
+ * @given batch of transaction with the wrong order
+ * @when TransportBuilder tries to build TransactionSequence object
+ * @then built error
+ */
+TEST_F(TransportBuilderTest, TransactionWrongOrder) {
+  std::vector<proto::Transaction> transactions;
+  std::vector<decltype(createUnbuildTransaction())> builders;
+  std::vector<interface::types::HashType> batch_hashes;
+  for (int i = 0; i < 10; i++) {
+    auto reduced_tr = TestUnsignedTransactionBuilder()
+                          .createdTime(created_time + i)
+                          .quorum(quorum)
+                          .setAccountQuorum(account_id, quorum)
+                          .creatorAccountId(account_id);
+    builders.push_back(reduced_tr);
+    batch_hashes.push_back(reduced_tr.build().reduced_hash());
+  }
+  for (auto &builder : builders) {
+    auto tr =
+        builder.batchMeta(interface::types::BatchType::ATOMIC, batch_hashes)
+            .build()
+            .signAndAddSignature(keypair)
+            .finish();
+    transactions.push_back(tr);
+  }
+  auto val = framework::expected::val(
+      TransportBuilder<interface::TransactionSequence,
+                       validation::SignedTransactionsCollectionValidator<
+                           validation::TransactionValidator<
+                               validation::FieldValidator,
+                               validation::CommandValidatorVisitor<
+                                   validation::FieldValidator>>>>()
+          .build(transactions));
+  ASSERT_TRUE(val);
+  val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 10); };
 }
