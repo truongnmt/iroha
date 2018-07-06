@@ -25,7 +25,12 @@
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
-#include "module/shared_model/validators/validators.hpp"
+
+/// number of commands in a single transaction
+constexpr int number_of_commands = 5;
+
+/// number of transactions in a single block
+constexpr int number_of_txs = 100;
 
 class BlockBenchmark : public benchmark::Fixture {
  public:
@@ -38,13 +43,13 @@ class BlockBenchmark : public benchmark::Fixture {
 
     auto base_tx = txbuilder.createdTime(iroha::time::now()).quorum(1);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < number_of_commands; i++) {
       base_tx.transferAsset("player@one", "player@two", "coin", "", "5.00");
     }
 
     std::vector<shared_model::proto::Transaction> txs;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < number_of_txs; i++) {
       txs.push_back(base_tx.build());
     }
 
@@ -64,13 +69,13 @@ class ProposalBenchmark : public benchmark::Fixture {
 
     auto base_tx = txbuilder.createdTime(iroha::time::now()).quorum(1);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < number_of_commands; i++) {
       base_tx.transferAsset("player@one", "player@two", "coin", "", "5.00");
     }
 
     std::vector<shared_model::proto::Transaction> txs;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < number_of_txs; i++) {
       txs.push_back(base_tx.build());
     }
 
