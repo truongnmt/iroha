@@ -15,36 +15,42 @@
  * Each benchmark runs transaction() and commands() call to
  * initialize possibly lazy fields.
  */
-#define BOOST_NO_RTTI
+
 #include <benchmark/benchmark.h>
-#include <chrono>
 
 #include "backend/protobuf/block.hpp"
-#include "builders/protobuf/block.hpp"
-#include "builders/protobuf/transaction.hpp"
 #include "datetime/time.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
-#include "module/shared_model/validators/validators.hpp"
+
+/// number of commands in a single transaction
+constexpr int number_of_commands = 5;
+
+/// number of transactions in a single block
+constexpr int number_of_txs = 100;
 
 class BlockBenchmark : public benchmark::Fixture {
  public:
   // Block cannot be copy-assigned, that's why the state is kept in a builder
   TestBlockBuilder complete_builder;
 
+  /**
+   * Initialize block builder for benchmarks
+   */
   void SetUp(benchmark::State &st) override {
     TestBlockBuilder builder;
     TestTransactionBuilder txbuilder;
+
     auto base_tx = txbuilder.createdTime(iroha::time::now()).quorum(1);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < number_of_commands; i++) {
       base_tx.transferAsset("player@one", "player@two", "coin", "", "5.00");
     }
 
     std::vector<shared_model::proto::Transaction> txs;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < number_of_txs; i++) {
       txs.push_back(base_tx.build());
     }
 
@@ -64,13 +70,13 @@ class ProposalBenchmark : public benchmark::Fixture {
 
     auto base_tx = txbuilder.createdTime(iroha::time::now()).quorum(1);
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < number_of_commands; i++) {
       base_tx.transferAsset("player@one", "player@two", "coin", "", "5.00");
     }
 
     std::vector<shared_model::proto::Transaction> txs;
 
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < number_of_txs; i++) {
       txs.push_back(base_tx.build());
     }
 
@@ -79,6 +85,35 @@ class ProposalBenchmark : public benchmark::Fixture {
   }
 };
 
+/**
+ * calls getters of a given object (block or proposal),
+ * so that lazy fields are initialized.
+ * @param obj - Block or Proposal
+ */
+template <typename T>
+void checkLoop(const T &obj) {
+  for (const auto &tx : obj.transactions()) {
+    benchmark::DoNotOptimize(tx.commands());
+  }
+}
+
+BENCHMARK_F(BlockBenchmark, CopyTest)(benchmark::State &st) {
+  auto block = complete_builder.build();
+
+  while (st.KeepRunning()) {
+    shared_model::proto::Block copy(block.getTransport());
+
+    checkLoop(copy);
+  }
+}
+
+BENCHMARK_F(BlockBenchmark, MoveTest)(benchmark::State &st) {
+  auto block = complete_builder.build();
+
+  while (st.KeepRunning()) {
+    shared_model::proto::Block copy(std::move(block.getTransport()));
+
+    checkLoop(copy);
 BENCHMARK_F(BlockBenchmark, TransportCopyTest)(benchmark::State &st) {
   auto block = complete_builder.build();
 
