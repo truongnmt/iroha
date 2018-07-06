@@ -19,8 +19,6 @@
 #include <benchmark/benchmark.h>
 
 #include "backend/protobuf/block.hpp"
-#include "builders/protobuf/block.hpp"
-#include "builders/protobuf/transaction.hpp"
 #include "datetime/time.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
@@ -37,6 +35,9 @@ class BlockBenchmark : public benchmark::Fixture {
   // Block cannot be copy-assigned, that's why the state is kept in a builder
   TestBlockBuilder complete_builder;
 
+  /**
+   * Initialize block builder for benchmarks
+   */
   void SetUp(benchmark::State &st) override {
     TestBlockBuilder builder;
     TestTransactionBuilder txbuilder;
@@ -84,27 +85,35 @@ class ProposalBenchmark : public benchmark::Fixture {
   }
 };
 
+/**
+ * calls getters of a given object (block or proposal),
+ * so that lazy fields are initialized.
+ * @param obj - Block or Proposal
+ */
+template <typename T>
+void checkLoop(const T &obj) {
+  for (const auto &tx : obj.transactions()) {
+    benchmark::DoNotOptimize(tx.commands());
+  }
+}
+
 BENCHMARK_F(BlockBenchmark, CopyTest)(benchmark::State &st) {
   auto block = complete_builder.build();
 
   while (st.KeepRunning()) {
     shared_model::proto::Block copy(block.getTransport());
 
-    for (const auto &tx : copy.transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(copy);
   }
 }
 
-BENCHMARK_F(BlockBenchmark, MoveTest)(benchmark::State &state) {
+BENCHMARK_F(BlockBenchmark, MoveTest)(benchmark::State &st) {
   auto block = complete_builder.build();
 
-  while (state.KeepRunning()) {
+  while (st.KeepRunning()) {
     shared_model::proto::Block copy(std::move(block.getTransport()));
 
-    for (const auto &tx : copy.transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(copy);
   }
 }
 
@@ -114,9 +123,7 @@ BENCHMARK_F(BlockBenchmark, CloneTest)(benchmark::State &st) {
   while (st.KeepRunning()) {
     auto copy = clone(block);
 
-    for (const auto &tx : copy->transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(*copy);
   }
 }
 
@@ -126,9 +133,7 @@ BENCHMARK_F(ProposalBenchmark, CopyTest)(benchmark::State &st) {
   while (st.KeepRunning()) {
     shared_model::proto::Proposal copy(proposal.getTransport());
 
-    for (const auto &tx : copy.transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(copy);
   }
 }
 
@@ -138,9 +143,7 @@ BENCHMARK_F(ProposalBenchmark, MoveTest)(benchmark::State &state) {
   while (state.KeepRunning()) {
     shared_model::proto::Proposal copy(std::move(proposal.getTransport()));
 
-    for (const auto &tx : copy.transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(copy);
   }
 }
 
@@ -150,9 +153,7 @@ BENCHMARK_F(ProposalBenchmark, CloneTest)(benchmark::State &st) {
   while (st.KeepRunning()) {
     auto copy = clone(proposal);
 
-    for (const auto &tx : copy->transactions()) {
-      benchmark::DoNotOptimize(tx.commands());
-    }
+    checkLoop(*copy);
   }
 }
 
