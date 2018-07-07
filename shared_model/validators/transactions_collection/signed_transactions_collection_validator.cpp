@@ -5,8 +5,6 @@
 
 #include "validators/transactions_collection/signed_transactions_collection_validator.hpp"
 
-#include <boost/format.hpp>
-#include <boost/range/algorithm/copy.hpp>
 #include "validators/field_validator.hpp"
 #include "validators/transaction_validator.hpp"
 
@@ -18,24 +16,16 @@ namespace shared_model {
     SignedTransactionsCollectionValidator<TransactionValidator>::validate(
         const interface::types::TransactionsForwardCollectionType &transactions)
         const {
-      auto txs = transactions | boost::adaptors::transformed([](interface::Transaction &tx) {
-        return std::shared_ptr<interface::Transaction>(clone(tx));
-      });
-//      std::vector<interface::Transaction> res;
-//      boost::copy(txs, std::back_inserter(res));
-//      return validate(txs);
+      auto txs = transactions | boost::adaptors::transformed([](auto &tx) {
+                   return std::shared_ptr<interface::Transaction>(clone(tx));
+                 });
+      return validatePointers(txs);
     }
 
-  template Answer SignedTransactionsCollectionValidator<
-      TransactionValidator<FieldValidator,
-                           CommandValidatorVisitor<FieldValidator>>>::
-  validate(const interface::types::TransactionsForwardCollectionType
-           &transactions) const;
-
     template <typename TransactionValidator>
-    Answer
-    SignedTransactionsCollectionValidator<TransactionValidator>::validate(
-        const interface::types::SharedTxsCollectionType &transactions) const {
+    Answer SignedTransactionsCollectionValidator<TransactionValidator>::
+        validatePointers(const interface::types::SharedTxsCollectionType
+                             &transactions) const {
       ReasonsGroupType reason;
       reason.first = "Transaction list";
       for (const auto &tx : transactions) {
@@ -57,11 +47,9 @@ namespace shared_model {
       return res;
     }
 
-  template Answer SignedTransactionsCollectionValidator<
-      TransactionValidator<FieldValidator,
-                           CommandValidatorVisitor<FieldValidator>>>::
-  validate(const interface::types::SharedTxsCollectionType &transactions)
-  const;
+    template class SignedTransactionsCollectionValidator<
+        TransactionValidator<FieldValidator,
+                             CommandValidatorVisitor<FieldValidator>>>;
 
   }  // namespace validation
 }  // namespace shared_model

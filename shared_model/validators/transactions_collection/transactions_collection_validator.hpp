@@ -38,8 +38,9 @@ namespace shared_model {
           const interface::types::TransactionsForwardCollectionType
               &transactions) const = 0;
 
-      virtual Answer validate(const interface::types::SharedTxsCollectionType
-                                  &transactions) const = 0;
+      virtual Answer validatePointers(
+          const interface::types::SharedTxsCollectionType &transactions)
+          const = 0;
     };
 
   }  // namespace validation

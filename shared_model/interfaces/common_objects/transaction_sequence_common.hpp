@@ -20,10 +20,11 @@ namespace shared_model {
                            boost::forward_traversal_tag,
                            const Transaction &>;
 
-    using SharedTxsCollectionType =
-    std::vector<std::shared_ptr<Transaction>>;
-    }
-  }  // namespace interface
+      using SharedTxsCollectionType =
+          boost::any_range<std::shared_ptr<Transaction>,
+                           boost::forward_traversal_tag>;
+    }  // namespace types
+  }    // namespace interface
 }  // namespace shared_model
 
 #endif  // IROHA_TRANSACTION_SEQUENCE_COMMON_HPP

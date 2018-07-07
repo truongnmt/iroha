@@ -16,7 +16,7 @@ namespace shared_model {
         const types::SharedTxsCollectionType &transactions,
         const validation::TransactionsCollectionValidator<TransactionValidator>
             &validator) {
-      auto answer = validator.validate(transactions);
+      auto answer = validator.validatePointers(transactions);
       if (answer.hasErrors()) {
         return iroha::expected::makeError(answer.reason());
       }
@@ -32,8 +32,7 @@ namespace shared_model {
                 validation::CommandValidatorVisitor<
                     validation::FieldValidator>>> &validator);
 
-    types::SharedTxsCollectionType
-    TransactionSequence::transactions() {
+    types::SharedTxsCollectionType TransactionSequence::transactions() {
       return transactions_;
     }
 
