@@ -4,6 +4,11 @@
  */
 
 #include "interfaces/iroha_internal/transaction_sequence.hpp"
+
+#include <boost/compute/algorithm.hpp>
+#include <boost/range/adaptors.hpp>
+#include <boost/range/algorithm_ext.hpp>
+#include <boost/range/join.hpp>
 #include "validators/field_validator.hpp"
 #include "validators/transaction_validator.hpp"
 
@@ -36,24 +41,32 @@ namespace shared_model {
       return transactions_;
     }
 
+    const types::BatchesType &TransactionSequence::batches() {
+      return *batches_;
+    }
+
     TransactionSequence::TransactionSequence(
         const types::SharedTxsCollectionType &transactions)
-        : transactions_(transactions) {
-      std::unordered_map<std::string, std::vector<std::shared_ptr<Transaction>>>
-          extracted_batches;
-      for (const auto &tx : transactions) {
-        if (auto meta = tx->batch_meta()) {
-          auto hashes = meta.get()->transactionHashes();
-          auto batch_hash = calculateBatchHash(hashes);
-          extracted_batches[batch_hash].push_back(tx);
-        } else {
-          batches_.push_back(std::vector<std::shared_ptr<Transaction>>{tx});
-        }
-      }
-      for (auto it : extracted_batches) {
-        batches_.push_back(it.second);
-      }
-    }
+        : transactions_(transactions), batches_{[this]() -> types::BatchesType {
+            std::unordered_map<std::string,
+                               std::vector<std::shared_ptr<Transaction>>>
+                extracted_batches;
+            std::vector<types::SharedTxsCollectionType> batches;
+            for (const auto &tx : transactions_) {
+              if (auto meta = tx->batch_meta()) {
+                auto hashes = meta.get()->transactionHashes();
+                auto batch_hash = this->calculateBatchHash(hashes);
+                extracted_batches[batch_hash].push_back(tx);
+              } else {
+                batches.push_back(std::vector<std::shared_ptr<Transaction>>{tx});
+              }
+            }
+            for (auto it : extracted_batches) {
+              batches.push_back(it.second);
+            }
+            types::SharedTxsCollectionType s = batches.at(0);
+            return batches;
+          }} {}
 
     std::string TransactionSequence::calculateBatchHash(
         std::vector<types::HashType> reduced_hashes) {

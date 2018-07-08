@@ -42,6 +42,7 @@ namespace shared_model {
        * @return transactions collection
        */
       types::SharedTxsCollectionType transactions();
+      const types::BatchesType& batches();
 
      private:
       explicit TransactionSequence(
@@ -51,7 +52,7 @@ namespace shared_model {
 
       types::SharedTxsCollectionType transactions_;
 
-      std::vector<std::vector<std::shared_ptr<Transaction>>> batches_;
+      detail::LazyInitializer<types::BatchesType> batches_;
     };
 
   }  // namespace interface

@@ -23,6 +23,10 @@ namespace shared_model {
       using SharedTxsCollectionType =
           boost::any_range<std::shared_ptr<Transaction>,
                            boost::forward_traversal_tag>;
+
+      using BatchesType = boost::any_range<SharedTxsCollectionType,
+                                           boost::forward_traversal_tag,
+                                           SharedTxsCollectionType&>;
     }  // namespace types
   }    // namespace interface
 }  // namespace shared_model
