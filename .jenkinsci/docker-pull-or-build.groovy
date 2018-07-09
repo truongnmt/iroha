@@ -35,14 +35,14 @@ def dockerPullOrUpdate(imageName, currentDockerfileURL, previousDockerfileURL, r
     }
     else {
       // try pulling image from Dockerhub, probably image is already there
-      def testExitCode = sh(script: "docker pull ${DOCKER_REGISTRY_BASENAME}:${imageName}", returnStatus: true)
+      def testExitCode = sh(script: "docker pull ${imageName}", returnStatus: true)
       if (testExitCode != 0) {
         // image does not (yet) exist on Dockerhub. Build it
-        iC = docker.build("${DOCKER_REGISTRY_BASENAME}:${commit}-${BUILD_NUMBER}", "$buildOptions --no-cache -f /tmp/${env.GIT_COMMIT}/f1 /tmp/${env.GIT_COMMIT}")   
+        iC = docker.build("${DOCKER_REGISTRY_BASENAME}:${commit}-${BUILD_NUMBER}", "$buildOptions --no-cache -f /tmp/${env.GIT_COMMIT}/f1 /tmp/${env.GIT_COMMIT}")
       }
       else {
         // no difference found compared to both previous and reference Dockerfile
-        iC = docker.image("${DOCKER_REGISTRY_BASENAME}:${imageName}")
+        iC = docker.image("${imageName}")
       }
     }
   }
