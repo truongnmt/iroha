@@ -15,6 +15,8 @@ namespace shared_model {
     Proposal &Proposal::operator=(Proposal &&o) noexcept {
       proto_ = std::move(o.proto_);
       transactions_.invalidate();
+
+      return *this;
     }
 
     TransactionsCollectionType Proposal::transactions() const {
