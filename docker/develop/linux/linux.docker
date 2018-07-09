@@ -1,0 +1,253 @@
+#FROM hyperledger/iroha:develop-base
+FROM local/crossbuild-base
+
+ARG PARALLELISM=1
+ARG CMAKE_BUILD_TYPE=Release
+ARG TARGET_DIST=ubuntu
+ARG TARGET_SUITE=xenial
+# arm-linux-gnueabihf, aarch64-linux-gnu, x86_64-linux-gnu
+ARG CROSS_TRIPLE_PREFIX=arm-linux-gnueabihf
+ENV CROSS_TRIPLE_PREFIX=$CROSS_TRIPLE_PREFIX
+# armhf, arm64, amd64
+ARG TARGET_ARCH=armhf
+ENV TARGET_ARCH=$TARGET_ARCH
+ARG GCC_VERSION=5
+ENV GCC_VERSION=$GCC_VERSION
+
+# valid ARG/ENV combinations
+# +-------------+--------------+-------------+-------------+---------------------+
+# | TARGET_DIST | TARGET_SUITE | GCC_VERSION | TARGET_ARCH | CROSS_TRIPLE_PREFIX |
+# +-------------+--------------+-------------+-------------+---------------------+
+# | ubuntu      | xenial       |           5 | armhf       | arm-linux-gnueabihf |
+# | ubuntu      | xenial       |           5 | arm64       | aarch64-linux-gnu   |
+# | ubuntu      | xenial       |           5 | amd64       | x86_64-linux-gnu    |
+# | ubuntu      | bionic       |           7 | armhf       | arm-linux-gnueabihf |
+# | ubuntu      | bionic       |           7 | arm64       | aarch64-linux-gnu   |
+# | ubuntu      | bionic       |           7 | amd64       | x86_64-linux-gnu    |
+# | debian      | stretch      |           6 | armhf       | arm-linux-gnueabihf |
+# | debian      | stretch      |           6 | arm64       | aarch64-linux-gnu   |
+# | debian      | stretch      |           6 | amd64       | x86_64-linux-gnu    |
+# +-------------+--------------+-------------+-------------+---------------------+
+# dists older that xenial and stretch are not supported
+
+ENV IROHA_HOME /opt/iroha
+ENV IROHA_BUILD /opt/iroha/build
+ENV STAGING /opt/staging
+ENV SYSROOT /opt/root
+
+ENV CC_CROSS=$CROSS_TRIPLE_PREFIX-gcc-$GCC_VERSION
+ENV CXX_CROSS=$CROSS_TRIPLE_PREFIX-g++-$GCC_VERSION
+
+RUN echo "\n \
+	deb [arch=${TARGET_ARCH}] http://ftp.tu-chemnitz.de/pub/linux/ubuntu-ports/ $(lsb_release -sc) universe \n" >> /etc/apt/sources.list
+
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y --no-update
+
+RUN apt-get update && apt-get install -y \
+	# gcc-7
+	crossbuild-essential-$TARGET_ARCH \
+	# for Debian Stretch as it requires CXXABI_1_3_10
+	gcc-6-$CROSS_TRIPLE_PREFIX \
+	g++-6-$CROSS_TRIPLE_PREFIX \
+	# for Ubuntu Xenial as it requires CXXABI_1_3_9
+	gcc-5-$CROSS_TRIPLE_PREFIX \
+	g++-5-$CROSS_TRIPLE_PREFIX
+
+RUN set -ex; \
+	mkdir $STAGING $SYSROOT
+
+# we need rootfs tars as there is no reliable toolset for bootstrapping rootfs during
+# unprivileged Docker build process
+COPY rootfs/$TARGET_DIST-$TARGET_SUITE-$TARGET_ARCH-base.tgz /tmp/$TARGET_DIST-$TARGET_SUITE-$TARGET_ARCH-base.tgz
+
+RUN set -ex; \
+	tar zxf /tmp/$TARGET_DIST-$TARGET_SUITE-$TARGET_ARCH-base.tgz -C $SYSROOT; \
+	rm -rf /tmp/$TARGET_DIST-$TARGET_SUITE-$TARGET_ARCH-base.tgz
+
+RUN set -ex; \
+	dpkg --add-architecture $TARGET_ARCH
+
+# deboostrapped ubuntu rootfs do not contain libtbb, install it.
+# debootstrap complains about missing libtbb when creating rootfs
+# although the package itself is found on native ARM platforms in the same repo
+RUN set -ex; \
+	if [ "$TARGET_DIST" = "ubuntu" ]; then \
+		apt-get download -y \
+		libtbb2:$TARGET_ARCH \
+		libtbb-dev:$TARGET_ARCH; \
+		dpkg --force-all --root $SYSROOT -i /*.deb; \
+		rm -rf /*.deb; \
+	fi
+
+COPY toolchain.cmake /opt/toolchain.cmake
+
+# relink rootfs libs paths from absolute to relative so we can link against them
+# otherwise they point to host libs
+RUN cd $SYSROOT/usr/lib/$CROSS_TRIPLE_PREFIX; \
+	find ../../../lib/$CROSS_TRIPLE_PREFIX -name libz.so.*.*.* -exec ln -sf {} libz.so \;; \
+	find ../../../lib/$CROSS_TRIPLE_PREFIX -name libcrypto.so.*.*.* -exec ln -sf {} libcrypto.so \;; \
+	find ../../../lib/$CROSS_TRIPLE_PREFIX -name libssl.so.*.*.* -exec ln -sf {} libssl.so \;; \
+	# this is a hack. postgres' ./configure script does not handle --with-libs
+	# pointing to rootfs correctly
+	find $SYSROOT/lib/$CROSS_TRIPLE_PREFIX -name libz.so.*.*.* -exec ln -sf {} /usr/lib/$CROSS_TRIPLE_PREFIX/libz.so \;
+
+# install boost 1.66.0
+RUN set -ex; \
+	cd $IROHA_DEPS_PATH/boost; \
+	./bootstrap.sh --prefix=$STAGING --with-libraries=system,filesystem; \
+	if [ "$TARGET_ARCH" = "amd64" ]; then \
+		./b2 \
+	        --stagedir=$STAGING \
+	        --prefix=$STAGING; \
+	    ./b2 cxxflags="-std=c++14" -j ${PARALLELISM} install; \
+	else \
+		sed -i "s/using gcc ;/using gcc \: arm \: $CXX_CROSS ;/" project-config.jam; \
+	    ./b2 \
+	        --stagedir=$STAGING \
+	        --prefix=$STAGING toolset=gcc-arm headers; \
+	    ./b2 cxxflags="-std=c++14" -j ${PARALLELISM} install; \
+	fi
+
+# install c-ares
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+	 	-DCMAKE_BUILD_TYPE=Release \
+	 	-H${IROHA_DEPS_PATH}/c-ares \
+	 	-B${IROHA_DEPS_PATH}/c-ares/build; \
+	cmake --build ${IROHA_DEPS_PATH}/c-ares/build --target install -- -j${PARALLELISM}; \
+ 	rm -rf $IROHA_DEPS_PATH/c-ares
+
+# install protobuf
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-Dprotobuf_BUILD_TESTS=OFF \
+		-Dprotobuf_BUILD_SHARED_LIBS=ON \
+		-H${IROHA_DEPS_PATH}/protobuf/cmake \
+		-B${IROHA_DEPS_PATH}/protobuf/build; \
+	cmake --build ${IROHA_DEPS_PATH}/protobuf/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/protobuf
+
+# install gflags
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-H${IROHA_DEPS_PATH}/gflags \
+		-B${IROHA_DEPS_PATH}/gflags/build; \
+	cmake --build ${IROHA_DEPS_PATH}/gflags/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/gflags
+
+# copy grpc cmake patches
+COPY ./grpc-patch/grpc_cmake.patch $IROHA_DEPS_PATH/grpc/grpc_cmake.patch
+COPY ./grpc-patch/ImportExecutables.cmake $IROHA_DEPS_PATH/grpc/cmake/ImportExecutables.cmake
+
+#patch grpc
+RUN (cd ${IROHA_DEPS_PATH}/grpc; git apply grpc_cmake.patch)
+
+# install grpc
+RUN set -ex; \
+	cmake \
+		-DIMPORT_EXECUTABLES=$IROHA_DEPS_PATH/grpc/cmake/ImportExecutables.cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DgRPC_BENCHMARK_PROVIDER="" \
+		-DgRPC_ZLIB_PROVIDER=package  \
+		-DgRPC_CARES_PROVIDER=package \
+		-DgRPC_SSL_PROVIDER=package \
+		-DgRPC_PROTOBUF_PROVIDER=package \
+		-DgRPC_GFLAGS_PROVIDER=package \
+		-DBUILD_SHARED_LIBS=ON \
+		-H${IROHA_DEPS_PATH}/grpc \
+		-B${IROHA_DEPS_PATH}/grpc/build; \
+	cmake --build ${IROHA_DEPS_PATH}/grpc/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/grpc
+
+# install gtest
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -H${IROHA_DEPS_PATH}/googletest \
+        -B${IROHA_DEPS_PATH}/googletest/build; \
+    cmake --build $IROHA_DEPS_PATH/googletest/build --target install -- -j${PARALLELISM}; \
+    rm -rf $IROHA_DEPS_PATH/googletest
+
+# install spdlog v0.16.3
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DSPDLOG_BUILD_TESTING=OFF \
+        -H${IROHA_DEPS_PATH}/spdlog \
+        -B${IROHA_DEPS_PATH}/spdlog/build; \
+    cmake --build ${IROHA_DEPS_PATH}/spdlog/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/spdlog
+
+# install rxcpp
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+		-H${IROHA_DEPS_PATH}/RxCpp \
+		-B${IROHA_DEPS_PATH}/RxCpp/build; \
+	cmake --build ${IROHA_DEPS_PATH}/RxCpp/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/RxCpp
+
+# install rapidjson
+RUN set -ex; \
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=$STAGING \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+		-DRAPIDJSON_BUILD_EXAMPLES=OFF \
+		-H${IROHA_DEPS_PATH}/rapidjson \
+		-B${IROHA_DEPS_PATH}/rapidjson/build; \
+	cmake --build ${IROHA_DEPS_PATH}/rapidjson/build --target install -- -j${PARALLELISM}; \
+	rm -rf ${IROHA_DEPS_PATH}/rapidjson
+
+# install libpq
+RUN set -ex; \
+	cd ${IROHA_DEPS_PATH}/postgresql; \
+	unset TARGET_ARCH; \
+	CC=$CC_CROSS CXX=$CXX_CROSS \
+		./configure --prefix=$STAGING --host=$CROSS_TRIPLE_PREFIX --without-readline; \
+	# build
+	make -j${PARALLELISM} -C src/bin/pg_config; \
+    make -j${PARALLELISM} -C src/interfaces/libpq; \
+    make -j${PARALLELISM} -C src/backend/utils fmgroids.h; \
+    cp src/backend/utils/fmgroids.h src/include/utils/fmgroids.h; \
+    # install
+    make -C src/bin/pg_config install; \
+    make -C src/interfaces/libpq install; \
+    make -C src/include install; \
+    rm -rf ${IROHA_DEPS_PATH}/postgresql
+
+# install libpqxx
+RUN set -ex; \
+    cd ${IROHA_DEPS_PATH}/libpqxx; \
+	CC=$CC_CROSS CXX=$CXX_CROSS \
+		./configure \
+			--host=$CROSS_TRIPLE_PREFIX \
+			--with-sysroot=$STAGING \
+			--with-postgres-lib=$STAGING/lib \
+			--with-postgres-include=$STAGING/include \
+			--prefix=$STAGING \
+			--disable-documentation --with-pic; \
+	make -j${PARALLELISM} install; \
+	rm -rf ${IROHA_DEPS_PATH}/libpqxx
+
+# install libed25519
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DTESTING=OFF \
+        -H${IROHA_DEPS_PATH}/ed25519 \
+        -B${IROHA_DEPS_PATH}/ed25519/build; \
+    cmake --build ${IROHA_DEPS_PATH}/ed25519/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/ed25519
+
+RUN rm -rf ${IROHA_DEPS_PATH}

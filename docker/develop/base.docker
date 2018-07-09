@@ -1,0 +1,165 @@
+FROM ubuntu:18.04
+
+ENV IROHA_DEPS_PATH /opt/iroha_deps
+# number of concurrent threads during build
+# usage: docker build --build-arg PARALLELISM=8 -t name/name .
+ARG PARALLELISM=1
+# TODO: move python3.6-dev, python-dev to x86_64 dockerfile
+RUN apt-get update && apt-get install -y \
+	autoconf \
+	automake \
+	bison \
+	build-essential \
+	ccache \
+	file \
+	flex \
+	git \
+	gzip \
+	help2man \
+	libcurl-openssl1.0-dev \
+	libpcre3-dev \
+	libssl1.0-dev \
+	libtool \
+	openjdk-8-jdk \
+	python3-pip \
+	python3-setuptools \
+	python-pip \
+	software-properties-common \
+	texinfo \
+	wget \
+	zlib1g-dev
+
+# fetch cmake 3.11.4
+RUN set -ex; \
+    git clone https://gitlab.kitware.com/cmake/cmake.git $IROHA_DEPS_PATH/cmake; \
+    (cd $IROHA_DEPS_PATH/cmake; git checkout 316bd45439ad8ced6b31bcb10303a788038387ef); \
+    (cd $IROHA_DEPS_PATH/cmake; ./bootstrap --system-curl --parallel=${PARALLELISM} --enable-ccache); \
+    make -j${PARALLELISM} -C $IROHA_DEPS_PATH/cmake; \
+    make -C $IROHA_DEPS_PATH/cmake install; \
+    ldconfig; \
+    rm -rf $IROHA_DEPS_PATH/cmake
+
+# fetch boost 1.66.0
+RUN set -ex; \
+    git clone https://github.com/boostorg/boost $IROHA_DEPS_PATH/boost; \
+    (cd $IROHA_DEPS_PATH/boost; git checkout b143a5b72075f47307a23e680889d8434c8afc54); \
+    (cd $IROHA_DEPS_PATH/boost ; git submodule update --init --recursive); \
+    (cd $IROHA_DEPS_PATH/boost ; $IROHA_DEPS_PATH/boost/bootstrap.sh --with-libraries=system,filesystem); \
+    (cd $IROHA_DEPS_PATH/boost ; $IROHA_DEPS_PATH/boost/b2 headers); \
+    (cd $IROHA_DEPS_PATH/boost ; $IROHA_DEPS_PATH/boost/b2 cxxflags="-std=c++14" -j ${PARALLELISM} install); \
+    ldconfig; \
+    (cd $IROHA_DEPS_PATH/boost; git clean -fdx; git reset --hard)
+
+# fetch protobuf v3.5.1
+RUN set -ex; \
+	git clone https://github.com/google/protobuf $IROHA_DEPS_PATH/protobuf; \
+	(cd $IROHA_DEPS_PATH/protobuf; git checkout 106ffc04be1abf3ff3399f54ccf149815b287dd9); \
+	cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -Dprotobuf_BUILD_TESTS=OFF \
+        -Dprotobuf_BUILD_SHARED_LIBS=ON \
+        -H$IROHA_DEPS_PATH/protobuf/cmake \
+        -B$IROHA_DEPS_PATH/protobuf/build_host; \
+    cmake --build $IROHA_DEPS_PATH/protobuf/build_host --target install -- -j${PARALLELISM}; \
+    cp $IROHA_DEPS_PATH/protobuf/build_host/js_embed /usr/bin; \
+    ldconfig; \
+    rm -rf $IROHA_DEPS_PATH/protobuf/build_host
+
+# fetch gflags
+RUN set -ex; \
+    git clone https://github.com/gflags/gflags $IROHA_DEPS_PATH/gflags; \
+    (cd $IROHA_DEPS_PATH/gflags; git checkout f8a0efe03aa69b3336d8e228b37d4ccb17324b88); \
+    cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -H$IROHA_DEPS_PATH/gflags \
+        -B$IROHA_DEPS_PATH/gflags/build_host; \
+    cmake --build $IROHA_DEPS_PATH/gflags/build_host --target install -- -j${PARALLELISM}; \
+    ldconfig; \
+    rm -rf $IROHA_DEPS_PATH/gflags/build_host
+
+# fetch c-ares
+RUN set -ex; \
+    git clone https://github.com/c-ares/c-ares $IROHA_DEPS_PATH/c-ares; \
+    (cd $IROHA_DEPS_PATH/c-ares ; git checkout 3be1924221e1326df520f8498d704a5c4c8d0cce); \
+    cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -H$IROHA_DEPS_PATH/c-ares \
+        -B$IROHA_DEPS_PATH/c-ares/build_host; \
+    cmake --build $IROHA_DEPS_PATH/c-ares/build_host --target install -- -j${PARALLELISM}; \
+    ldconfig; \
+    rm -rf $IROHA_DEPS_PATH/c-ares/build_host
+
+# fetch grpc 1.11.0
+RUN set -ex; \
+    git clone https://github.com/grpc/grpc $IROHA_DEPS_PATH/grpc; \
+    (cd $IROHA_DEPS_PATH/grpc ; git checkout bd44e485f69d70ca4095cea92decd98de3892aa6); \
+    cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DgRPC_BENCHMARK_PROVIDER="" \
+        -DgRPC_ZLIB_PROVIDER=package \
+        -DgRPC_CARES_PROVIDER=package \
+        -DgRPC_SSL_PROVIDER=package \
+        -DgRPC_PROTOBUF_PROVIDER=package \
+        -DgRPC_GFLAGS_PROVIDER=package \
+        -DBUILD_SHARED_LIBS=ON \
+        -H$IROHA_DEPS_PATH/grpc \
+        -B$IROHA_DEPS_PATH/grpc/build_host; \
+    cmake --build $IROHA_DEPS_PATH/grpc/build_host --target install -- -j${PARALLELISM}; \
+    ldconfig; \
+    rm -rf $IROHA_DEPS_PATH/grpc/build_host
+
+# fetch gtest
+RUN set -ex; \
+    git clone https://github.com/google/googletest $IROHA_DEPS_PATH/googletest; \
+    (cd $IROHA_DEPS_PATH/googletest ; git checkout ec44c6c1675c25b9827aacd08c02433cccde7780)
+
+# fetch spdlog v0.16.3
+RUN set -ex; \
+    git clone https://github.com/gabime/spdlog $IROHA_DEPS_PATH/spdlog; \
+    (cd $IROHA_DEPS_PATH/spdlog ; git checkout ccd675a286f457068ee8c823f8207f13c2325b26)
+
+# fetch rxcpp
+RUN set -ex; \
+    git clone https://github.com/Reactive-Extensions/RxCpp $IROHA_DEPS_PATH/RxCpp; \
+    (cd $IROHA_DEPS_PATH/RxCpp ; git checkout 1b2e0589f19cb34d8cd58803677701dcf2161876)
+
+# fetch rapidjson
+RUN set -ex; \
+    git clone https://github.com/miloyip/rapidjson $IROHA_DEPS_PATH/rapidjson; \
+    (cd $IROHA_DEPS_PATH/rapidjson ; git checkout f54b0e47a08782a6131cc3d60f94d038fa6e0a51)
+
+# fetch libpq
+RUN set -ex; \
+    git clone https://git.postgresql.org/git/postgresql.git $IROHA_DEPS_PATH/postgresql; \
+    (cd $IROHA_DEPS_PATH/postgresql; git checkout 029386ccbddd0a33d481b94e511f5219b03e6636); \
+    # build host pgconfig
+    (cd $IROHA_DEPS_PATH/postgresql; ./configure --without-readline --prefix=/usr/local; \
+		make -j${PARALLELISM} -C src/bin/pg_config install; \
+		make clean)
+
+# fetch pqxx
+RUN set -ex; \
+    git clone https://github.com/jtv/libpqxx $IROHA_DEPS_PATH/libpqxx; \
+    (cd $IROHA_DEPS_PATH/libpqxx ; git checkout 5b17abce5ac2b1a2f8278718405b7ade8bb30ae9); \
+    wget -O $IROHA_DEPS_PATH/libpqxx/config/config.guess 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=6b2374c79506ee82a8b440f6d1ca293e2e2e2463'; \
+    wget -O $IROHA_DEPS_PATH/libpqxx/config/config.sub 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=6b2374c79506ee82a8b440f6d1ca293e2e2e2463'
+
+# fetch ed25519
+RUN set -ex; \
+    git clone git://github.com/hyperledger/iroha-ed25519.git $IROHA_DEPS_PATH/ed25519; \
+    (cd $IROHA_DEPS_PATH/ed25519; git checkout e7188b8393dbe5ac54378610d53630bd4a180038)
+
+# install SWIG
+RUN set -ex; \
+	wget -O /tmp/swig-3.0.12.tar.gz https://github.com/swig/swig/archive/rel-3.0.12.tar.gz; \
+	tar -C /tmp -zxf /tmp/swig-3.0.12.tar.gz; \
+    (cd /tmp/swig-rel-3.0.12; ./autogen.sh; \
+    	./configure; \
+    	make -j${PARALLELISM}; \
+    	make install); \
+    rm -rf /tmp/swig-rel-3.0.12
+
+# install Python bindings dependencies
+RUN set -ex; \
+    pip install grpcio_tools; \
+    pip3 install grpcio_tools

@@ -1,0 +1,218 @@
+#FROM hyperledger/iroha:develop-base
+FROM local/crossbuild-base
+
+ARG CMAKE_BUILD_TYPE=Release
+ARG CROSS_TRIPLE_PREFIX=x86_64-apple-darwin16
+
+ENV IROHA_HOME /opt/iroha
+ENV IROHA_BUILD /opt/iroha/build
+ENV OSXCROSS_PATH /opt/osxcross
+ENV OSXCROSS_STAGING /opt/staging
+ENV PATH=${PATH}:$OSXCROSS_PATH/target/bin
+
+ENV CC_CROSS=$CROSS_TRIPLE_PREFIX-clang
+ENV CXX_CROSS=$CROSS_TRIPLE_PREFIX-clang++
+ENV AR_CROSS=$CROSS_TRIPLE_PREFIX-ar
+ENV RANLIB_CROSS=$CROSS_TRIPLE_PREFIX-ranlib
+ENV MACOSX_DEPLOYMENT_TARGET=10.12
+
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+
+RUN echo "\n \
+		deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic main\n\
+		deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic main\n" >> /etc/apt/sources.list
+
+RUN apt-get update && apt-get install -y \
+	clang-7
+
+RUN ln -s /usr/bin/clang-7 /usr/bin/clang; \
+	ln -s /usr/bin/clang++-7 /usr/bin/clang++
+
+# setup osxcross
+RUN set -ex; \
+	mkdir $OSXCROSS_PATH; \
+    git clone https://github.com/tpoechtrager/osxcross.git $OSXCROSS_PATH; \
+    (cd $OSXCROSS_PATH; git checkout 1a1733a773fe26e7b6c93b16fbf9341f22fac831); \
+    wget -O $OSXCROSS_PATH/tarballs/MacOSX10.12.sdk.tar.xz https://www.dropbox.com/s/1gkn8u74ameni9k/MacOSX10.12.sdk.tar.xz; \
+    # replace 10.8 as we'll never really use it
+    sed -i 's/10.8\*) TARGET=darwin12/10.12\*) TARGET=darwin16/g' $OSXCROSS_PATH/build.sh; \
+    # this will (expectedly) fail during tests
+    (cd $OSXCROSS_PATH && UNATTENDED=1 ./build.sh || true)
+
+# install apple-libtapi
+RUN set -ex; \
+	git clone --depth=1 https://github.com/tpoechtrager/apple-libtapi.git $OSXCROSS_PATH/apple-libtapi; \
+	cd $OSXCROSS_PATH/apple-libtapi; \
+	INSTALLPREFIX=$OSXCROSS_PATH/target ./build.sh; \
+	./install.sh
+
+# install cctools-port
+RUN set -ex; \
+	git clone --depth=1 https://github.com/tpoechtrager/cctools-port.git $OSXCROSS_PATH/cctools-port; \
+	cd $OSXCROSS_PATH/cctools-port/cctools; \
+	./configure --prefix=$OSXCROSS_PATH/target --target=x86_64-apple-darwin16 --with-libtapi=$OSXCROSS_PATH/target; \
+	make -j${PARALLELISM} install; \
+	ln -s $OSXCROSS_PATH/cctools-port/cctools/misc/install_name_tool /usr/local/bin/install_name_tool
+
+# install packages from macports
+RUN set -ex; \
+	UNATTENDED=1 omp install boost python27 python36 tbb
+
+# copy cmake toolchain file
+COPY ./macos-toolchain.cmake $OSXCROSS_PATH/toolchain.cmake
+
+# copy dylib relinker script
+COPY ./dylib-unhell.py $OSXCROSS_PATH/dylib-unhell.py
+
+# install c-ares
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+	 	-DCMAKE_BUILD_TYPE=Release \
+	 	-H${IROHA_DEPS_PATH}/c-ares \
+	 	-B${IROHA_DEPS_PATH}/c-ares/build; \
+	cmake --build ${IROHA_DEPS_PATH}/c-ares/build --target install -- -j${PARALLELISM}; \
+ 	rm -rf $IROHA_DEPS_PATH/c-ares
+
+# install protobuf
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-Dprotobuf_BUILD_TESTS=OFF \
+		-Dprotobuf_BUILD_SHARED_LIBS=ON \
+		-H${IROHA_DEPS_PATH}/protobuf/cmake \
+		-B${IROHA_DEPS_PATH}/protobuf/build; \
+	cmake --build ${IROHA_DEPS_PATH}/protobuf/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/protobuf
+
+# install gflags
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-H${IROHA_DEPS_PATH}/gflags \
+		-B${IROHA_DEPS_PATH}/gflags/build; \
+	cmake --build ${IROHA_DEPS_PATH}/gflags/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/gflags
+
+# copy grpc cmake patches
+COPY ./grpc-patch/grpc_cmake.patch $IROHA_DEPS_PATH/grpc/grpc_cmake.patch
+COPY ./grpc-patch/ImportExecutables.cmake $IROHA_DEPS_PATH/grpc/cmake/ImportExecutables.cmake
+
+#patch grpc
+RUN (cd ${IROHA_DEPS_PATH}/grpc; git apply grpc_cmake.patch)
+
+# install grpc
+RUN set -ex; \
+	cmake \
+		-DIMPORT_EXECUTABLES=$IROHA_DEPS_PATH/grpc/cmake/ImportExecutables.cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DgRPC_BENCHMARK_PROVIDER="" \
+		-DgRPC_ZLIB_PROVIDER=package  \
+		-DgRPC_CARES_PROVIDER=package \
+		-DgRPC_SSL_PROVIDER=package \
+		-DgRPC_PROTOBUF_PROVIDER=package \
+		-DgRPC_GFLAGS_PROVIDER=package \
+		-DBUILD_SHARED_LIBS=ON \
+		-H${IROHA_DEPS_PATH}/grpc \
+		-B${IROHA_DEPS_PATH}/grpc/build; \
+	cmake --build ${IROHA_DEPS_PATH}/grpc/build --target install -- -j${PARALLELISM}; \
+	rm -rf $IROHA_DEPS_PATH/grpc
+
+# install gtest
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -H${IROHA_DEPS_PATH}/googletest \
+        -B${IROHA_DEPS_PATH}/googletest/build; \
+    cmake --build $IROHA_DEPS_PATH/googletest/build --target install -- -j${PARALLELISM}; \
+    rm -rf $IROHA_DEPS_PATH/googletest
+
+# install spdlog v0.16.3
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DSPDLOG_BUILD_TESTING=OFF \
+        -H${IROHA_DEPS_PATH}/spdlog \
+        -B${IROHA_DEPS_PATH}/spdlog/build; \
+    cmake --build ${IROHA_DEPS_PATH}/spdlog/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/spdlog
+
+# install rxcpp
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+		-H${IROHA_DEPS_PATH}/RxCpp \
+		-B${IROHA_DEPS_PATH}/RxCpp/build; \
+	cmake --build ${IROHA_DEPS_PATH}/RxCpp/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/RxCpp
+
+# install rapidjson
+RUN set -ex; \
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=/opt/staging \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+		-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+		-DRAPIDJSON_BUILD_EXAMPLES=OFF \
+		-H${IROHA_DEPS_PATH}/rapidjson \
+		-B${IROHA_DEPS_PATH}/rapidjson/build; \
+	cmake --build ${IROHA_DEPS_PATH}/rapidjson/build --target install -- -j${PARALLELISM}; \
+	rm -rf ${IROHA_DEPS_PATH}/rapidjson
+
+# install libpq
+RUN set -ex; \
+	cd ${IROHA_DEPS_PATH}/postgresql; \
+	CC=$CC_CROSS AR=$AR_CROSS RANLIB=$RANLIB_CROSS \
+		./configure \
+			--prefix=/opt/staging \
+			--host=x86_64-apple-darwin \
+			--without-readline; \
+	# build
+	make -j${PARALLELISM} -C src/bin/pg_config; \
+    make -j${PARALLELISM} -C src/interfaces/libpq; \
+    make -j${PARALLELISM} -C src/backend/utils fmgroids.h; \
+    cp src/backend/utils/fmgroids.h src/include/utils/fmgroids.h; \
+    # install
+    make -C src/bin/pg_config install; \
+    make -C src/interfaces/libpq install; \
+    make -C src/include install; \
+    rm -rf ${IROHA_DEPS_PATH}/postgresql
+
+# install libpqxx
+RUN set -ex; \
+	(cd ${IROHA_DEPS_PATH}/libpqxx; \
+		CC=$CC_CROSS CXX=$CXX_CROSS AR=$AR_CROSS RANLIB=$RANLIB_CROSS \
+		./configure \
+			--host=x86_64-apple-darwin \
+			--with-sysroot=/opt/staging \
+			--with-postgres-lib=/opt/staging/lib \
+			--with-postgres-include=/opt/staging/include \
+			--prefix=/opt/staging \
+			--disable-documentation --with-pic); \
+	(cd ${IROHA_DEPS_PATH}/libpqxx; make -j${PARALLELISM} install); \
+	rm -rf ${IROHA_DEPS_PATH}/libpqxx
+
+# install libed25519
+RUN set -ex; \
+	cmake \
+		-DCMAKE_TOOLCHAIN_FILE=$OSXCROSS_PATH/toolchain.cmake \
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+        -DTESTING=OFF \
+        -H${IROHA_DEPS_PATH}/ed25519 \
+        -B${IROHA_DEPS_PATH}/ed25519/build; \
+    cmake --build ${IROHA_DEPS_PATH}/ed25519/build --target install -- -j${PARALLELISM}; \
+    rm -rf ${IROHA_DEPS_PATH}/ed25519
+
+# TODO: build tries to look for that lib in /opt/local/lib/libintl.8.dylib
+# investigate whether it is hardcoded somewhere
+RUN mkdir -p /opt/local/lib; ln -s /opt/osxcross/target/macports/pkgs/opt/local/lib/libintl.8.dylib /opt/local/lib/libintl.8.dylib
+# TODO: same here
+RUN ln -sf /opt/osxcross/target/macports/pkgs/opt/local/Library/Frameworks/Python.framework/Versions/2.7/lib/libpython2.7.dylib \
+		   /opt/osxcross/target/macports/pkgs/opt/local/lib/libpython2.7.dylib
+
+RUN rm -rf ${IROHA_DEPS_PATH}

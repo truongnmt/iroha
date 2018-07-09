@@ -1,0 +1,41 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index af56886..c9043ff 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -137,6 +137,14 @@ if(WIN32 AND MSVC)
+   set(_gRPC_BASELIB_LIBRARIES wsock32 ws2_32)
+ endif()
+ 
++# when crosscompiling import the executable targets from a file
++if(CMAKE_CROSSCOMPILING)
++  SET(IMPORT_EXECUTABLES "IMPORTFILE-NOTFOUND" CACHE FILEPATH "Point it to the export file from a native build")
++  INCLUDE(${IMPORT_EXECUTABLES})
++  message(STATUS grpc_cpp_plugin)
++ENDIF(CMAKE_CROSSCOMPILING)
++
++
+ # Create directory for generated .proto files
+ set(_gRPC_PROTO_GENS_DIR ${CMAKE_BINARY_DIR}/gens)
+ file(MAKE_DIRECTORY ${_gRPC_PROTO_GENS_DIR})
+@@ -11539,6 +11547,7 @@ target_link_libraries(grpc_cli
+ endif (gRPC_BUILD_TESTS)
+ if (gRPC_BUILD_CODEGEN)
+ 
++if (NOT CMAKE_CROSSCOMPILING)
+ add_executable(grpc_cpp_plugin
+   src/compiler/cpp_plugin.cc
+ )
+@@ -11573,6 +11582,13 @@ if (gRPC_INSTALL)
+   )
+ endif()
+ 
++endif(NOT CMAKE_CROSSCOMPILING)
++
++IF(NOT CMAKE_CROSSCOMPILING)
++  EXPORT(TARGETS grpc_cpp_plugin FILE ${CMAKE_BINARY_DIR}/ImportExecutables.cmake )
++ENDIF(NOT CMAKE_CROSSCOMPILING)
++
++
+ endif (gRPC_BUILD_CODEGEN)
+ if (gRPC_BUILD_CODEGEN)
+ 

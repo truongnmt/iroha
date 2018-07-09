@@ -68,31 +68,20 @@ pipeline {
             beforeAgent true
             expression { return params.x86_64_linux }
           }
-          agent { label 'x86_64' }
+          agent { label 'x86_64_aws_cross' }
           steps {
             script {
-              debugBuild = load ".jenkinsci/debug-build.groovy"
-              coverage = load ".jenkinsci/selected-branches-coverage.groovy"
-              if (coverage.selectedBranchesCoverage(['develop', 'master'])) {
-                debugBuild.doDebugBuild(true)
-              }
-              else {
-                debugBuild.doDebugBuild()
-              }
-              if (GIT_LOCAL_BRANCH ==~ /(master|develop)/) {
-                releaseBuild = load ".jenkinsci/release-build.groovy"
-                releaseBuild.doReleaseBuild()
-              }
+              debugBuild = load ".jenkinsci/debug-build-cross.groovy"
             }
           }
-          post {
-            always {
-              script {
-                post = load ".jenkinsci/linux-post-step.groovy"
-                post.linuxPostStep()
-              }
-            }
-          }
+          // post {
+          //   always {
+          //     script {
+          //       post = load ".jenkinsci/linux-post-step.groovy"
+          //       post.linuxPostStep()
+          //     }
+          //   }
+          // }
         }
         stage('armv7_linux') {
           when {
