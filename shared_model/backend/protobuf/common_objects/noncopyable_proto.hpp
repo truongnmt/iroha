@@ -18,7 +18,7 @@ class NonCopyableProto : public Iface {
   using TransportType = Proto;
 
   template <typename Transport>
-  NonCopyableProto(Transport &&ref) : proto_(std::forward<Transport>(ref)){};
+  NonCopyableProto(Transport &&ref) : proto_(std::forward<Transport>(ref)){}
 
   const Proto &getTransport() const {
     return proto_;
