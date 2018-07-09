@@ -37,7 +37,6 @@ namespace shared_model {
       interface::types::HeightType height() const override;
 
      private:
-      // lazy
       template <typename T>
       using Lazy = detail::LazyInitializer<T>;
 
