@@ -110,6 +110,8 @@ include_directories(
 
 SET(IROHA_ROOT_PROJECT ON)
 
+add_definitions(-DBOOST_NO_RTTI)
+
 include(FeatureSummary)
 include(cmake/functions.cmake)
 include(cmake/dependencies.cmake)
