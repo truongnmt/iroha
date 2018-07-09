@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 #include <interfaces/iroha_internal/transaction_sequence.hpp>
+#include <validators/transactions_collection/batch_order_validator.hpp>
 
 #include "block.pb.h"
 #include "builders/protobuf/block.hpp"
@@ -172,6 +173,32 @@ class TransportBuilderTest : public ::testing::Test {
         .build();
   }
 
+  //--------------------------------Batch---------------------------------------
+  auto getValidBatch(
+      int seed,
+      int size,
+      interface::types::BatchType type = interface::types::BatchType::ATOMIC) {
+    std::vector<proto::Transaction> transactions;
+    std::vector<decltype(createUnbuildTransaction())> builders;
+    std::vector<interface::types::HashType> batch_hashes;
+    for (int i = 0; i < size; i++) {
+      auto reduced_tr = TestUnsignedTransactionBuilder()
+                            .createdTime(created_time + seed + i)
+                            .quorum(quorum)
+                            .setAccountQuorum(account_id, quorum)
+                            .creatorAccountId(account_id);
+      builders.push_back(reduced_tr);
+      batch_hashes.push_back(reduced_tr.build().reduced_hash());
+    }
+    for (auto &builder : builders) {
+      auto tr = builder.batchMeta(type, batch_hashes)
+                    .build()
+                    .signAndAddSignature(keypair)
+                    .finish();
+      transactions.push_back(tr);
+    }
+    return transactions;
+  }
   /**
    * Receives model object, gets transport from it, converts transport into
    * model object and checks if original and obtained model objects are the same
@@ -459,46 +486,93 @@ TEST_F(TransportBuilderTest, TransactionSequenceEmpty) {
                            validation::TransactionValidator<
                                validation::FieldValidator,
                                validation::CommandValidatorVisitor<
-                                   validation::FieldValidator>>>>()
+                                   validation::FieldValidator>>,
+                           validation::BatchOrderValidator>>()
           .build(tr));
   ASSERT_TRUE(val);
   val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 0); };
 }
 
 /**
- * @given batch of transaction with the wrong order
+ * @given sequence of transaction with a right order
  * @when TransportBuilder tries to build TransactionSequence object
- * @then built error
+ * @then  built object contains TransactionSequence shared model object
  */
-TEST_F(TransportBuilderTest, TransactionWrongOrder) {
+TEST_F(TransportBuilderTest, TransactionSequenceCorrect) {
   std::vector<proto::Transaction> transactions;
-  std::vector<decltype(createUnbuildTransaction())> builders;
-  std::vector<interface::types::HashType> batch_hashes;
-  for (int i = 0; i < 10; i++) {
-    auto reduced_tr = TestUnsignedTransactionBuilder()
-                          .createdTime(created_time + i)
-                          .quorum(quorum)
-                          .setAccountQuorum(account_id, quorum)
-                          .creatorAccountId(account_id);
-    builders.push_back(reduced_tr);
-    batch_hashes.push_back(reduced_tr.build().reduced_hash());
-  }
-  for (auto &builder : builders) {
-    auto tr =
-        builder.batchMeta(interface::types::BatchType::ATOMIC, batch_hashes)
-            .build()
-            .signAndAddSignature(keypair)
-            .finish();
-    transactions.push_back(tr);
-  }
+  auto batch1 = getValidBatch(0, 10);
+  auto batch2 = getValidBatch(20, 5);
+  auto batch3 = getValidBatch(30, 5);
+  std::move(
+      std::begin(batch1), std::end(batch1), std::back_inserter(transactions));
+  std::move(
+      std::begin(batch2), std::end(batch2), std::back_inserter(transactions));
+  transactions.push_back(createTransaction());
+  transactions.push_back(createTransaction());
+  transactions.push_back(createTransaction());
+  std::move(
+      std::begin(batch3), std::end(batch3), std::back_inserter(transactions));
+  transactions.push_back(createTransaction());
   auto val = framework::expected::val(
       TransportBuilder<interface::TransactionSequence,
                        validation::SignedTransactionsCollectionValidator<
                            validation::TransactionValidator<
                                validation::FieldValidator,
                                validation::CommandValidatorVisitor<
-                                   validation::FieldValidator>>>>()
+                                   validation::FieldValidator>>,
+                           validation::BatchOrderValidator>>()
           .build(transactions));
   ASSERT_TRUE(val);
-  val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 10); };
+  val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 24); };
 }
+/**
+ * @given batch of transaction with transaction in the middle
+ * @when TransportBuilder tries to build TransactionSequence object
+ * @then  built an error
+ */
+TEST_F(TransportBuilderTest, TransactionInteraptedBatch) {
+  std::vector<proto::Transaction> transactions;
+  auto batch = getValidBatch(0, 10);
+  std::move(std::begin(batch),
+            std::begin(batch) + 3,
+            std::back_inserter(transactions));
+  transactions.push_back(createTransaction());
+  std::move(
+      std::begin(batch) + 3, std::end(batch), std::back_inserter(transactions));
+  auto error = framework::expected::err(
+      TransportBuilder<interface::TransactionSequence,
+                       validation::SignedTransactionsCollectionValidator<
+                           validation::TransactionValidator<
+                               validation::FieldValidator,
+                               validation::CommandValidatorVisitor<
+                                   validation::FieldValidator>>,
+                           validation::BatchOrderValidator>>()
+          .build(transactions));
+  ASSERT_TRUE(error);
+}
+
+/**
+ * @given batch of transaction with wrong order
+ * @when TransportBuilder tries to build TransactionSequence object
+ * @then  built an error
+ */
+TEST_F(TransportBuilderTest, BatchWrongOrder) {
+  std::vector<proto::Transaction> transactions;
+  auto batch = getValidBatch(0, 10);
+  std::move(
+      std::begin(batch) + 3, std::end(batch), std::back_inserter(transactions));
+  std::move(std::begin(batch),
+            std::begin(batch) + 3,
+            std::back_inserter(transactions));
+  auto error = framework::expected::err(
+      TransportBuilder<interface::TransactionSequence,
+                       validation::SignedTransactionsCollectionValidator<
+                           validation::TransactionValidator<
+                               validation::FieldValidator,
+                               validation::CommandValidatorVisitor<
+                                   validation::FieldValidator>>,
+                           validation::BatchOrderValidator>>()
+          .build(transactions));
+  ASSERT_TRUE(error);
+}
+

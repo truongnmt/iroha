@@ -26,18 +26,22 @@ namespace shared_model {
        * @return Result containing transaction sequence if validation successful
        * and string message containing error otherwise
        */
-      template <typename TransactionValidator>
+      template <typename TransactionValidator, typename OrderValidator>
       iroha::expected::Result<interface::TransactionSequence, std::string>
       createTransactionSequence(
-          const interface::types::TransactionsForwardCollectionType &transactions,
-          const validation::TransactionsCollectionValidator<TransactionValidator>
-          &validator) {
+          const interface::types::TransactionsForwardCollectionType
+              &transactions,
+          const validation::TransactionsCollectionValidator<
+              TransactionValidator,
+              OrderValidator> &validator) {
         auto answer = validator.validate(transactions);
         if (answer.hasErrors()) {
           return iroha::expected::makeError(answer.reason());
         }
-        return iroha::expected::makeValue(interface::TransactionSequence(transactions));
+        return iroha::expected::makeValue(
+            interface::TransactionSequence(transactions));
       }
+
      public:
       TransportBuilder<interface::TransactionSequence, SV>(
           SV stateless_validator = SV())
@@ -51,8 +55,7 @@ namespace shared_model {
        */
       iroha::expected::Result<interface::TransactionSequence, std::string>
       build(interface::types::TransactionsForwardCollectionType transport) {
-        return createTransactionSequence(
-            transport, stateless_validator_);
+        return createTransactionSequence(transport, stateless_validator_);
       }
 
      private:
