@@ -26,3 +26,8 @@ target_link_libraries(ordering_gate_test
     shared_model_stateless_validation
     iroha_amount
     )
+
+addtest(on_demand_os_test on_demand_os_test.cpp)
+target_link_libraries(on_demand_os_test
+    on_demand_ordering_service
+    )
