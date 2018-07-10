@@ -26,7 +26,6 @@ message GetTransactions {
 
 message GetAccountAssets {
   string account_id = 1;
-  string asset_id = 2;
 }
 
 message GetAccountDetail {
@@ -43,6 +42,10 @@ message GetRoles {
 
 message GetRolePermissions{
   string role_id = 1;
+}
+
+message GetPendingTransactions {
+
 }
 
 message QueryPayloadMeta {
@@ -67,6 +70,7 @@ message Query {
        GetRoles get_roles = 10;
        GetRolePermissions get_role_permissions = 11;
        GetAssetInfo get_asset_info = 12;
+       GetPendingTransactions get_pending_transactions = 13;
      }
   }
 

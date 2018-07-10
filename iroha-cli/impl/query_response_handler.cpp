@@ -15,8 +15,10 @@
  * limitations under the License.
  */
 
-#include "backend/protobuf/query_responses/proto_query_response.hpp"
 #include "query_response_handler.hpp"
+#include "backend/protobuf/permissions.hpp"
+#include "backend/protobuf/query_responses/proto_query_response.hpp"
+#include "interfaces/permissions.hpp"
 #include "logger/logger.hpp"
 #include "model/converters/pb_common.hpp"
 
@@ -137,19 +139,24 @@ namespace iroha_cli {
       const iroha::protocol::QueryResponse &response) {
     auto perms = response.role_permissions_response().permissions();
     std::for_each(perms.begin(), perms.end(), [this](auto perm) {
-      log_->info(prefix.at(kDefault), perm);
+      log_->info(
+          prefix.at(kDefault),
+          shared_model::proto::permissions::toString(
+              static_cast<shared_model::interface::permissions::Role>(perm)));
     });
   }
 
   void QueryResponseHandler::handleAccountAssetsResponse(
       const iroha::protocol::QueryResponse &response) {
-    auto acc_assets = response.account_assets_response().account_asset();
+    auto acc_assets = response.account_assets_response().account_assets();
     log_->info("[Account Assets]");
-    log_->info(prefix.at(kAccountId), acc_assets.account_id());
-    log_->info(prefix.at(kAssetId), acc_assets.asset_id());
-    auto balance =
-        iroha::model::converters::deserializeAmount(acc_assets.balance());
-    log_->info(prefix.at(kAmount), balance.to_string());
+    for (auto &acc_asset : acc_assets) {
+      log_->info(prefix.at(kAccountId), acc_asset.account_id());
+      log_->info(prefix.at(kAssetId), acc_asset.asset_id());
+      auto balance =
+          iroha::model::converters::deserializeAmount(acc_asset.balance());
+      log_->info(prefix.at(kAmount), balance.to_string());
+    }
   }
 
   void QueryResponseHandler::handleSignatoriesResponse(

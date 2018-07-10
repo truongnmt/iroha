@@ -25,12 +25,13 @@
 #include "builders/protobuf/common_objects/proto_account_builder.hpp"
 #include "builders/protobuf/common_objects/proto_amount_builder.hpp"
 #include "builders/protobuf/common_objects/proto_asset_builder.hpp"
+#include "builders/protobuf/queries.hpp"
+#include "builders/query_responses/block_query_response_builder.hpp"
 #include "execution/query_execution.hpp"
 #include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/shared_model/builders/protobuf/test_query_builder.hpp"
 #include "utils/query_error_response_visitor.hpp"
-#include "validators/permissions.hpp"
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -41,7 +42,7 @@ using ::testing::StrictMock;
 using namespace iroha;
 using namespace iroha::ametsuchi;
 using namespace framework::test_subscriber;
-using namespace shared_model::permissions;
+using namespace shared_model::interface::permissions;
 
 using wTransaction = std::shared_ptr<shared_model::interface::Transaction>;
 
@@ -53,9 +54,6 @@ class QueryValidateExecuteTest : public ::testing::Test {
     wsv_query = std::make_shared<StrictMock<MockWsvQuery>>();
     block_query = std::make_shared<StrictMock<MockBlockQuery>>();
     factory = std::make_shared<QueryProcessingFactory>(wsv_query, block_query);
-
-    EXPECT_CALL(*wsv_query, hasAccountGrantablePermission(_, _, _))
-        .WillRepeatedly(Return(false));
 
     creator = clone(shared_model::proto::AccountBuilder()
                         .accountId(admin_id)
@@ -71,7 +69,6 @@ class QueryValidateExecuteTest : public ::testing::Test {
                         .quorum(1)
                         .build());
   }
-
   std::shared_ptr<shared_model::interface::QueryResponse> validateAndExecute(
       const shared_model::interface::Query &query) {
     return factory->validateAndExecute(query);
@@ -109,7 +106,7 @@ class QueryValidateExecuteTest : public ::testing::Test {
   std::string admin_role = "admin";
 
   std::vector<std::string> admin_roles = {admin_role};
-  std::vector<std::string> role_permissions;
+  shared_model::interface::RolePermissionSet role_permissions;
   std::shared_ptr<shared_model::interface::Account> creator, account;
   std::shared_ptr<MockWsvQuery> wsv_query;
   std::shared_ptr<MockBlockQuery> block_query;
@@ -122,7 +119,7 @@ class GetAccountTest : public QueryValidateExecuteTest {
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
 
-    role_permissions = {can_get_my_account};
+    role_permissions = {Role::kGetMyAccount};
   }
 };
 
@@ -149,10 +146,9 @@ TEST_F(GetAccountTest, MyAccountValidCase) {
   EXPECT_CALL(*wsv_query, getAccount(admin_id)).WillOnce(Return(creator));
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::AccountResponse>(),
-                             response->get());
+    const auto &cast_resp = boost::apply_visitor(
+        framework::SpecifiedVisitor<shared_model::interface::AccountResponse>(),
+        response->get());
     ASSERT_EQ(cast_resp.account().accountId(), admin_id);
   });
 }
@@ -168,7 +164,7 @@ TEST_F(GetAccountTest, AllAccountValidCase) {
                    .getAccount(account_id)
                    .build();
 
-  role_permissions = {can_get_all_accounts};
+  role_permissions = {Role::kGetAllAccounts};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -179,10 +175,9 @@ TEST_F(GetAccountTest, AllAccountValidCase) {
       .WillOnce(Return(admin_roles));
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::AccountResponse>(),
-                             response->get());
+    const auto &cast_resp = boost::apply_visitor(
+        framework::SpecifiedVisitor<shared_model::interface::AccountResponse>(),
+        response->get());
     ASSERT_EQ(cast_resp.account().accountId(), account_id);
   });
 }
@@ -198,7 +193,7 @@ TEST_F(GetAccountTest, DomainAccountValidCase) {
                    .getAccount(account_id)
                    .build();
 
-  role_permissions = {can_get_domain_accounts};
+  role_permissions = {Role::kGetDomainAccounts};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -209,45 +204,9 @@ TEST_F(GetAccountTest, DomainAccountValidCase) {
       .WillOnce(Return(admin_roles));
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::AccountResponse>(),
-                             response->get());
-    ASSERT_EQ(cast_resp.account().accountId(), account_id);
-  });
-}
-
-/**
- * @given initialized storage, granted permission
- * @when get account information about other user
- * @then Return users account
- */
-TEST_F(GetAccountTest, GrantAccountValidCase) {
-  auto query = TestQueryBuilder()
-                   .creatorAccountId(admin_id)
-                   .getAccount(account_id)
-                   .build();
-
-  role_permissions = {};
-
-  EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
-      .WillOnce(Return(admin_roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
-      .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, account_id, can_get_my_account))
-      .WillOnce(Return(true));
-
-  EXPECT_CALL(*wsv_query, getAccount(account_id)).WillOnce(Return(account));
-  EXPECT_CALL(*wsv_query, getAccountRoles(account_id))
-      .WillOnce(Return(admin_roles));
-  auto response = validateAndExecute(query);
-  ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::AccountResponse>(),
-                             response->get());
+    const auto &cast_resp = boost::apply_visitor(
+        framework::SpecifiedVisitor<shared_model::interface::AccountResponse>(),
+        response->get());
     ASSERT_EQ(cast_resp.account().accountId(), account_id);
   });
 }
@@ -263,16 +222,12 @@ TEST_F(GetAccountTest, DifferentDomainAccountInValidCase) {
                    .getAccount("test@test2")
                    .build();
 
-  role_permissions = {can_get_domain_accounts};
+  role_permissions = {Role::kGetDomainAccounts};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, "test@test2", can_get_my_account))
-      .WillOnce(Return(false));
 
   auto response = validateAndExecute(query);
 
@@ -291,7 +246,7 @@ TEST_F(GetAccountTest, NoAccountExist) {
   auto query =
       TestQueryBuilder().creatorAccountId(admin_id).getAccount("none").build();
 
-  role_permissions = {can_get_all_accounts};
+  role_permissions = {Role::kGetAllAccounts};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -344,7 +299,7 @@ class GetAccountAssetsTest : public QueryValidateExecuteTest {
             },
             [](iroha::expected::Error<std::shared_ptr<std::string>>) {});
 
-    role_permissions = {can_get_my_acc_ast};
+    role_permissions = {Role::kGetMyAccAst};
   }
   std::shared_ptr<shared_model::interface::AccountAsset> accountAsset;
 };
@@ -357,15 +312,17 @@ class GetAccountAssetsTest : public QueryValidateExecuteTest {
 TEST_F(GetAccountAssetsTest, MyAccountValidCase) {
   auto query = TestQueryBuilder()
                    .creatorAccountId(admin_id)
-                   .getAccountAssets(admin_id, asset_id)
+                   .getAccountAssets(admin_id)
                    .build();
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query, getAccountAsset(admin_id, asset_id))
-      .WillOnce(Return(accountAsset));
+  EXPECT_CALL(*wsv_query, getAccountAssets(admin_id))
+      .WillOnce(Return(
+          std::vector<std::shared_ptr<shared_model::interface::AccountAsset>>(
+              {accountAsset})));
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
     const auto &cast_resp = boost::apply_visitor(
@@ -373,8 +330,8 @@ TEST_F(GetAccountAssetsTest, MyAccountValidCase) {
             shared_model::interface::AccountAssetResponse>(),
         response->get());
 
-    ASSERT_EQ(cast_resp.accountAsset().accountId(), admin_id);
-    ASSERT_EQ(cast_resp.accountAsset().assetId(), asset_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].accountId(), admin_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].assetId(), asset_id);
   });
 }
 
@@ -386,7 +343,7 @@ TEST_F(GetAccountAssetsTest, MyAccountValidCase) {
 TEST_F(GetAccountAssetsTest, AllAccountValidCase) {
   auto query = TestQueryBuilder()
                    .creatorAccountId(admin_id)
-                   .getAccountAssets(account_id, asset_id)
+                   .getAccountAssets(account_id)
                    .build();
 
   shared_model::builder::AccountAssetBuilder<
@@ -402,14 +359,16 @@ TEST_F(GetAccountAssetsTest, AllAccountValidCase) {
             accountAsset = v.value;
           },
           [](iroha::expected::Error<std::shared_ptr<std::string>>) {});
-  role_permissions = {can_get_all_acc_ast};
+  role_permissions = {Role::kGetAllAccAst};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query, getAccountAsset(account_id, asset_id))
-      .WillOnce(Return(accountAsset));
+  EXPECT_CALL(*wsv_query, getAccountAssets(account_id))
+      .WillOnce(Return(
+          std::vector<std::shared_ptr<shared_model::interface::AccountAsset>>(
+              {accountAsset})));
 
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
@@ -418,8 +377,8 @@ TEST_F(GetAccountAssetsTest, AllAccountValidCase) {
             shared_model::interface::AccountAssetResponse>(),
         response->get());
 
-    ASSERT_EQ(cast_resp.accountAsset().accountId(), account_id);
-    ASSERT_EQ(cast_resp.accountAsset().assetId(), asset_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].accountId(), account_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].assetId(), asset_id);
   });
 }
 
@@ -431,7 +390,7 @@ TEST_F(GetAccountAssetsTest, AllAccountValidCase) {
 TEST_F(GetAccountAssetsTest, DomainAccountValidCase) {
   auto query = TestQueryBuilder()
                    .creatorAccountId(admin_id)
-                   .getAccountAssets(account_id, asset_id)
+                   .getAccountAssets(account_id)
                    .build();
 
   shared_model::builder::AccountAssetBuilder<
@@ -447,14 +406,16 @@ TEST_F(GetAccountAssetsTest, DomainAccountValidCase) {
             accountAsset = v.value;
           },
           [](iroha::expected::Error<std::shared_ptr<std::string>>) {});
-  role_permissions = {can_get_domain_acc_ast};
+  role_permissions = {Role::kGetDomainAccAst};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query, getAccountAsset(account_id, asset_id))
-      .WillOnce(Return(accountAsset));
+  EXPECT_CALL(*wsv_query, getAccountAssets(account_id))
+      .WillOnce(Return(
+          std::vector<std::shared_ptr<shared_model::interface::AccountAsset>>(
+              {accountAsset})));
 
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
@@ -463,50 +424,8 @@ TEST_F(GetAccountAssetsTest, DomainAccountValidCase) {
             shared_model::interface::AccountAssetResponse>(),
         response->get());
 
-    ASSERT_EQ(cast_resp.accountAsset().accountId(), account_id);
-    ASSERT_EQ(cast_resp.accountAsset().assetId(), asset_id);
-  });
-}
-
-/**
- * @given initialized storage, granted permission
- * @when get account information about other user
- * @then Return account assets
- */
-TEST_F(GetAccountAssetsTest, GrantAccountValidCase) {
-  auto query = TestQueryBuilder()
-                   .creatorAccountId(admin_id)
-                   .getAccountAssets(account_id, asset_id)
-                   .build();
-
-  accountAsset = clone(shared_model::proto::AccountAssetBuilder()
-                           .assetId(accountAsset->assetId())
-                           .accountId(account_id)
-                           .balance(accountAsset->balance())
-                           .build());
-  role_permissions = {};
-
-  EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
-      .WillOnce(Return(admin_roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
-      .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, account_id, can_get_my_acc_ast))
-      .WillOnce(Return(true));
-
-  EXPECT_CALL(*wsv_query, getAccountAsset(account_id, asset_id))
-      .WillOnce(Return(accountAsset));
-
-  auto response = validateAndExecute(query);
-  ASSERT_NO_THROW({
-    const auto &cast_resp = boost::apply_visitor(
-        framework::SpecifiedVisitor<
-            shared_model::interface::AccountAssetResponse>(),
-        response->get());
-
-    ASSERT_EQ(cast_resp.accountAsset().accountId(), account_id);
-    ASSERT_EQ(cast_resp.accountAsset().assetId(), asset_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].accountId(), account_id);
+    ASSERT_EQ(cast_resp.accountAssets()[0].assetId(), asset_id);
   });
 }
 
@@ -518,7 +437,7 @@ TEST_F(GetAccountAssetsTest, GrantAccountValidCase) {
 TEST_F(GetAccountAssetsTest, DifferentDomainAccountInValidCase) {
   auto query = TestQueryBuilder()
                    .creatorAccountId(admin_id)
-                   .getAccountAssets("test@test2", asset_id)
+                   .getAccountAssets("test@test2")
                    .build();
 
   shared_model::builder::AccountAssetBuilder<
@@ -534,17 +453,12 @@ TEST_F(GetAccountAssetsTest, DifferentDomainAccountInValidCase) {
             accountAsset = v.value;
           },
           [](iroha::expected::Error<std::shared_ptr<std::string>>) {});
-  ;
-  role_permissions = {can_get_domain_acc_ast};
+  role_permissions = {Role::kGetDomainAccAst};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, "test@test2", can_get_my_acc_ast))
-      .WillOnce(Return(false));
 
   auto response = validateAndExecute(query);
 
@@ -562,7 +476,7 @@ TEST_F(GetAccountAssetsTest, DifferentDomainAccountInValidCase) {
 TEST_F(GetAccountAssetsTest, NoAccountExist) {
   auto query = TestQueryBuilder()
                    .creatorAccountId(admin_id)
-                   .getAccountAssets("none", asset_id)
+                   .getAccountAssets("none")
                    .build();
 
   shared_model::builder::AccountAssetBuilder<
@@ -578,15 +492,14 @@ TEST_F(GetAccountAssetsTest, NoAccountExist) {
             accountAsset = v.value;
           },
           [](iroha::expected::Error<std::shared_ptr<std::string>>) {});
-  ;
-  role_permissions = {can_get_all_acc_ast};
+  role_permissions = {Role::kGetAllAccAst};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
 
-  EXPECT_CALL(*wsv_query, getAccountAsset("none", asset_id))
+  EXPECT_CALL(*wsv_query, getAccountAssets("none"))
       .WillOnce(Return(boost::none));
 
   auto response = validateAndExecute(query);
@@ -603,7 +516,7 @@ class GetSignatoriesTest : public QueryValidateExecuteTest {
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
     signs = {shared_model::interface::types::PubkeyType(std::string(32, '0'))};
-    role_permissions = {can_get_my_signatories};
+    role_permissions = {Role::kGetMySignatories};
   }
   std::vector<shared_model::interface::types::PubkeyType> signs;
 };
@@ -647,7 +560,7 @@ TEST_F(GetSignatoriesTest, AllAccountValidCase) {
                    .getSignatories(account_id)
                    .build();
 
-  role_permissions = {can_get_all_signatories};
+  role_permissions = {Role::kGetAllSignatories};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -677,47 +590,12 @@ TEST_F(GetSignatoriesTest, DomainAccountValidCase) {
                    .getSignatories(account_id)
                    .build();
 
-  role_permissions = {can_get_domain_signatories};
+  role_permissions = {Role::kGetDomainSignatories};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query, getSignatories(account_id)).WillOnce(Return(signs));
-
-  auto response = validateAndExecute(query);
-  ASSERT_NO_THROW({
-    const auto &cast_resp = boost::apply_visitor(
-        framework::SpecifiedVisitor<
-            shared_model::interface::SignatoriesResponse>(),
-        response->get());
-
-    ASSERT_EQ(cast_resp.keys().size(), 1);
-  });
-}
-
-/**
- * @given initialized storage, granted permission
- * @when get account information about other user
- * @then Return signatories
- */
-TEST_F(GetSignatoriesTest, GrantAccountValidCase) {
-  auto query = TestQueryBuilder()
-                   .creatorAccountId(admin_id)
-                   .getSignatories(account_id)
-                   .build();
-
-  role_permissions = {};
-
-  EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
-      .WillOnce(Return(admin_roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
-      .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  admin_id, account_id, can_get_my_signatories))
-      .WillOnce(Return(true));
-
   EXPECT_CALL(*wsv_query, getSignatories(account_id)).WillOnce(Return(signs));
 
   auto response = validateAndExecute(query);
@@ -742,16 +620,12 @@ TEST_F(GetSignatoriesTest, DifferentDomainAccountInValidCase) {
                    .getSignatories("test@test2")
                    .build();
 
-  role_permissions = {can_get_domain_signatories};
+  role_permissions = {Role::kGetDomainSignatories};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  admin_id, "test@test2", can_get_my_signatories))
-      .WillOnce(Return(false));
 
   auto response = validateAndExecute(query);
 
@@ -772,7 +646,7 @@ TEST_F(GetSignatoriesTest, NoAccountExist) {
                    .getSignatories("none")
                    .build();
 
-  role_permissions = {can_get_all_signatories};
+  role_permissions = {Role::kGetAllSignatories};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -794,7 +668,7 @@ class GetAccountTransactionsTest : public QueryValidateExecuteTest {
  public:
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
-    role_permissions = {can_get_my_acc_txs};
+    role_permissions = {Role::kGetMyAccTxs};
     txs_observable = getDefaultTransactions(account_id, N);
   }
 
@@ -848,7 +722,7 @@ TEST_F(GetAccountTransactionsTest, AllAccountValidCase) {
                    .getAccountTransactions(account_id)
                    .build();
 
-  role_permissions = {can_get_all_acc_txs};
+  role_permissions = {Role::kGetAllAccTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -883,51 +757,12 @@ TEST_F(GetAccountTransactionsTest, DomainAccountValidCase) {
                    .getAccountTransactions(account_id)
                    .build();
 
-  role_permissions = {can_get_domain_acc_txs};
+  role_permissions = {Role::kGetDomainAccTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-
-  EXPECT_CALL(*block_query, getAccountTransactions(account_id))
-      .WillOnce(Return(txs_observable));
-
-  auto response = validateAndExecute(query);
-  ASSERT_NO_THROW({
-    const auto &cast_resp = boost::apply_visitor(
-        framework::SpecifiedVisitor<
-            shared_model::interface::TransactionsResponse>(),
-        response->get());
-
-    ASSERT_EQ(cast_resp.transactions().size(), N);
-    for (const auto &tx : cast_resp.transactions()) {
-      EXPECT_EQ(account_id, tx.creatorAccountId());
-    }
-  });
-}
-
-/**
- * @given initialized storage, granted permission
- * @when get account information about other user
- * @then Return error
- */
-TEST_F(GetAccountTransactionsTest, GrantAccountValidCase) {
-  auto query = TestQueryBuilder()
-                   .creatorAccountId(admin_id)
-                   .getAccountTransactions(account_id)
-                   .build();
-
-  role_permissions = {};
-
-  EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
-      .WillOnce(Return(admin_roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
-      .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, account_id, can_get_my_acc_txs))
-      .WillOnce(Return(true));
 
   EXPECT_CALL(*block_query, getAccountTransactions(account_id))
       .WillOnce(Return(txs_observable));
@@ -957,16 +792,12 @@ TEST_F(GetAccountTransactionsTest, DifferentDomainAccountInValidCase) {
                    .getAccountTransactions("test@test2")
                    .build();
 
-  role_permissions = {can_get_domain_acc_ast};
+  role_permissions = {Role::kGetDomainAccAst};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(
-      *wsv_query,
-      hasAccountGrantablePermission(admin_id, "test@test2", can_get_my_acc_txs))
-      .WillOnce(Return(false));
 
   auto response = validateAndExecute(query);
 
@@ -987,7 +818,7 @@ TEST_F(GetAccountTransactionsTest, NoAccountExist) {
                    .getAccountTransactions("none")
                    .build();
 
-  role_permissions = {can_get_all_acc_txs};
+  role_permissions = {Role::kGetAllAccTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -1009,7 +840,7 @@ class GetAccountAssetsTransactionsTest : public QueryValidateExecuteTest {
  public:
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
-    role_permissions = {can_get_my_acc_ast_txs};
+    role_permissions = {Role::kGetMyAccAstTxs};
     txs_observable = getDefaultTransactions(account_id, N);
   }
 
@@ -1063,7 +894,7 @@ TEST_F(GetAccountAssetsTransactionsTest, AllAccountValidCase) {
                    .getAccountAssetTransactions(account_id, asset_id)
                    .build();
 
-  role_permissions = {can_get_all_acc_ast_txs};
+  role_permissions = {Role::kGetAllAccAstTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -1098,51 +929,12 @@ TEST_F(GetAccountAssetsTransactionsTest, DomainAccountValidCase) {
                    .getAccountAssetTransactions(account_id, asset_id)
                    .build();
 
-  role_permissions = {can_get_domain_acc_ast_txs};
+  role_permissions = {Role::kGetDomainAccAstTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-
-  EXPECT_CALL(*block_query, getAccountAssetTransactions(account_id, asset_id))
-      .WillOnce(Return(txs_observable));
-
-  auto response = validateAndExecute(query);
-  ASSERT_NO_THROW({
-    const auto &cast_resp = boost::apply_visitor(
-        framework::SpecifiedVisitor<
-            shared_model::interface::TransactionsResponse>(),
-        response->get());
-
-    ASSERT_EQ(cast_resp.transactions().size(), N);
-    for (const auto &tx : cast_resp.transactions()) {
-      EXPECT_EQ(account_id, tx.creatorAccountId());
-    }
-  });
-}
-
-/**
- * @given initialized storage, granted permission
- * @when get account information about other user
- * @then Return error
- */
-TEST_F(GetAccountAssetsTransactionsTest, GrantAccountValidCase) {
-  auto query = TestQueryBuilder()
-                   .creatorAccountId(admin_id)
-                   .getAccountAssetTransactions(account_id, asset_id)
-                   .build();
-
-  role_permissions = {};
-
-  EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
-      .WillOnce(Return(admin_roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
-      .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  admin_id, account_id, can_get_my_acc_ast_txs))
-      .WillOnce(Return(true));
 
   EXPECT_CALL(*block_query, getAccountAssetTransactions(account_id, asset_id))
       .WillOnce(Return(txs_observable));
@@ -1172,16 +964,12 @@ TEST_F(GetAccountAssetsTransactionsTest, DifferentDomainAccountInValidCase) {
                    .getAccountAssetTransactions("test@test2", asset_id)
                    .build();
 
-  role_permissions = {can_get_domain_acc_ast_txs};
+  role_permissions = {Role::kGetDomainAccAstTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
   EXPECT_CALL(*wsv_query, getRolePermissions(admin_role))
       .WillOnce(Return(role_permissions));
-  EXPECT_CALL(*wsv_query,
-              hasAccountGrantablePermission(
-                  admin_id, "test@test2", can_get_my_acc_ast_txs))
-      .WillOnce(Return(false));
 
   auto response = validateAndExecute(query);
 
@@ -1202,7 +990,7 @@ TEST_F(GetAccountAssetsTransactionsTest, NoAccountExist) {
                    .getAccountAssetTransactions("none", asset_id)
                    .build();
 
-  role_permissions = {can_get_all_acc_ast_txs};
+  role_permissions = {Role::kGetAllAccAstTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -1230,7 +1018,7 @@ TEST_F(GetAccountAssetsTransactionsTest, NoAssetExist) {
                    .getAccountAssetTransactions(account_id, "none")
                    .build();
 
-  role_permissions = {can_get_all_acc_ast_txs};
+  role_permissions = {Role::kGetAllAccAstTxs};
 
   EXPECT_CALL(*wsv_query, getAccountRoles(admin_id))
       .WillOnce(Return(admin_roles));
@@ -1252,7 +1040,7 @@ class GetAssetInfoTest : public QueryValidateExecuteTest {
  public:
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
-    role_permissions = {can_read_assets};
+    role_permissions = {Role::kReadAssets};
     asset = clone(shared_model::proto::AssetBuilder()
                       .assetId(asset_id)
                       .domainId("test")
@@ -1282,10 +1070,9 @@ TEST_F(GetAssetInfoTest, MyAccountValidCase) {
 
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::AssetResponse>(),
-                             response->get());
+    const auto &cast_resp = boost::apply_visitor(
+        framework::SpecifiedVisitor<shared_model::interface::AssetResponse>(),
+        response->get());
 
     ASSERT_EQ(cast_resp.asset().assetId(), asset_id);
   });
@@ -1346,7 +1133,7 @@ class GetRolesTest : public QueryValidateExecuteTest {
  public:
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
-    role_permissions = {can_get_roles};
+    role_permissions = {Role::kGetRoles};
     roles = {admin_role, "some_role"};
   }
   std::vector<std::string> roles;
@@ -1368,10 +1155,9 @@ TEST_F(GetRolesTest, ValidCase) {
 
   auto response = validateAndExecute(query);
   ASSERT_NO_THROW({
-    const auto &cast_resp =
-        boost::apply_visitor(framework::SpecifiedVisitor<
-                                 shared_model::interface::RolesResponse>(),
-                             response->get());
+    const auto &cast_resp = boost::apply_visitor(
+        framework::SpecifiedVisitor<shared_model::interface::RolesResponse>(),
+        response->get());
 
     ASSERT_EQ(cast_resp.roles().size(), roles.size());
 
@@ -1428,11 +1214,12 @@ class GetRolePermissionsTest : public QueryValidateExecuteTest {
  public:
   void SetUp() override {
     QueryValidateExecuteTest::SetUp();
-    role_permissions = {can_get_roles};
-    perms = {can_get_my_account, can_get_my_signatories};
+    role_permissions = {Role::kGetRoles};
+    perms.set(Role::kGetMyAccount);
+    perms.set(Role::kGetMySignatories);
   }
   std::string role_id = "user";
-  std::vector<std::string> perms;
+  shared_model::interface::RolePermissionSet perms;
 };
 
 /**
@@ -1459,10 +1246,7 @@ TEST_F(GetRolePermissionsTest, ValidCase) {
             shared_model::interface::RolePermissionsResponse>(),
         response->get());
 
-    ASSERT_EQ(cast_resp.rolePermissions().size(), perms.size());
-    for (size_t i = 0; i < perms.size(); ++i) {
-      ASSERT_EQ(cast_resp.rolePermissions().at(i), perms.at(i));
-    }
+    ASSERT_EQ(cast_resp.rolePermissions(), perms);
   });
 }
 

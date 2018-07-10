@@ -1,28 +1,17 @@
 /**
- * Copyright Soramitsu Co., Ltd. 2017 All Rights Reserved.
- * http://soramitsu.co.jp
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *        http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "execution/query_execution.hpp"
 
 #include <boost/algorithm/string.hpp>
 
+#include "backend/protobuf/permissions.hpp"
 #include "execution/common_executor.hpp"
-#include "validators/permissions.hpp"
 
-using namespace shared_model::permissions;
+using namespace shared_model::interface::permissions;
+using namespace shared_model::proto::permissions;
 using namespace iroha;
 using namespace iroha::ametsuchi;
 
@@ -58,141 +47,129 @@ shared_model::proto::TemplateQueryResponseBuilder<1> statefulFailed() {
   return buildError<shared_model::interface::StatefulFailedErrorResponse>();
 }
 
-bool hasQueryPermission(const std::string &creator,
-                        const std::string &target_account,
-                        WsvQuery &wsv_query,
-                        const std::string &indiv_permission_id,
-                        const std::string &all_permission_id,
-                        const std::string &domain_permission_id) {
+static bool hasQueryPermission(const std::string &creator,
+                               const std::string &target_account,
+                               WsvQuery &wsv_query,
+                               Role indiv_permission_id,
+                               Role all_permission_id,
+                               Role domain_permission_id) {
   auto perms_set = iroha::getAccountPermissions(creator, wsv_query);
-  return
-      // 1. Creator has grant permission from other user
-      (creator != target_account
-       and wsv_query.hasAccountGrantablePermission(
-               creator, target_account, indiv_permission_id))
-      or  // ----- Creator has role permission ---------
-      (perms_set
-       and (
-               // 2. Creator want to query his account, must have role
-               // permission
-               (creator == target_account
-                and iroha::accountHasPermission(perms_set.value(),
-                                                indiv_permission_id))
-               or  // 3. Creator has global permission to get any account
-               (iroha::accountHasPermission(perms_set.value(),
-                                            all_permission_id))
-               or  // 4. Creator has domain permission
-               (getDomainFromName(creator) == getDomainFromName(target_account)
-                and iroha::accountHasPermission(perms_set.value(),
-                                                domain_permission_id))));
+  if (not perms_set) {
+    return false;
+  }
+
+  auto &set = perms_set.value();
+  // Creator want to query his account, must have role
+  // permission
+  return (creator == target_account and set.test(indiv_permission_id)) or
+      // Creator has global permission to get any account
+      set.test(all_permission_id) or
+      // Creator has domain permission
+      (getDomainFromName(creator) == getDomainFromName(target_account)
+       and set.test(domain_permission_id));
 }
 
 bool QueryProcessingFactory::validate(
+    const shared_model::interface::BlocksQuery &query) {
+  return checkAccountRolePermission(
+      query.creatorAccountId(), *_wsvQuery, Role::kGetBlocks);
+}
+bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAssetInfo &get_asset_info) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return checkAccountRolePermission(
-      query.creatorAccountId(), *_wsvQuery, can_read_assets);
+      query.creatorAccountId(), *_wsvQuery, Role::kReadAssets);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetRoles &get_roles) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return checkAccountRolePermission(
-      query.creatorAccountId(), *_wsvQuery, can_get_roles);
+      query.creatorAccountId(), *_wsvQuery, Role::kGetRoles);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetRolePermissions &get_role_permissions) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return checkAccountRolePermission(
-      query.creatorAccountId(), *_wsvQuery, can_get_roles);
+      query.creatorAccountId(), *_wsvQuery, Role::kGetRoles);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAccount &get_account) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_account.accountId(),
                             *_wsvQuery,
-                            can_get_my_account,
-                            can_get_all_accounts,
-                            can_get_domain_accounts);
+                            Role::kGetMyAccount,
+                            Role::kGetAllAccounts,
+                            Role::kGetDomainAccounts);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetSignatories &get_signatories) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_signatories.accountId(),
                             *_wsvQuery,
-                            can_get_my_signatories,
-                            can_get_all_signatories,
-                            can_get_domain_signatories);
+                            Role::kGetMySignatories,
+                            Role::kGetAllSignatories,
+                            Role::kGetDomainSignatories);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAccountAssets &get_account_assets) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_account_assets.accountId(),
                             *_wsvQuery,
-                            can_get_my_acc_ast,
-                            can_get_all_acc_ast,
-                            can_get_domain_acc_ast);
+                            Role::kGetMyAccAst,
+                            Role::kGetAllAccAst,
+                            Role::kGetDomainAccAst);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAccountDetail &get_account_detail) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_account_detail.accountId(),
                             *_wsvQuery,
-                            can_get_my_acc_detail,
-                            can_get_all_acc_detail,
-                            can_get_domain_acc_detail);
+                            Role::kGetMyAccDetail,
+                            Role::kGetAllAccDetail,
+                            Role::kGetDomainAccDetail);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAccountTransactions
         &get_account_transactions) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_account_transactions.accountId(),
                             *_wsvQuery,
-                            can_get_my_acc_txs,
-                            can_get_all_acc_txs,
-                            can_get_domain_acc_txs);
+                            Role::kGetMyAccTxs,
+                            Role::kGetAllAccTxs,
+                            Role::kGetDomainAccTxs);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetAccountAssetTransactions
         &get_account_asset_transactions) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return hasQueryPermission(query.creatorAccountId(),
                             get_account_asset_transactions.accountId(),
                             *_wsvQuery,
-                            can_get_my_acc_ast_txs,
-                            can_get_all_acc_ast_txs,
-                            can_get_domain_acc_ast_txs);
+                            Role::kGetMyAccAstTxs,
+                            Role::kGetAllAccAstTxs,
+                            Role::kGetDomainAccAstTxs);
 }
 
 bool QueryProcessingFactory::validate(
     const shared_model::interface::Query &query,
     const shared_model::interface::GetTransactions &get_transactions) {
-  // TODO: 03.02.2018 grimadas IR-851: check signatures
   return checkAccountRolePermission(
-             query.creatorAccountId(), *_wsvQuery, can_get_my_txs)
+             query.creatorAccountId(), *_wsvQuery, Role::kGetMyTxs)
       or checkAccountRolePermission(
-             query.creatorAccountId(), *_wsvQuery, can_get_all_txs);
+             query.creatorAccountId(), *_wsvQuery, Role::kGetAllTxs);
 }
 
 QueryProcessingFactory::QueryResponseBuilderDone
@@ -251,18 +228,19 @@ QueryProcessingFactory::executeGetAccount(
 QueryProcessingFactory::QueryResponseBuilderDone
 QueryProcessingFactory::executeGetAccountAssets(
     const shared_model::interface::GetAccountAssets &query) {
-  auto acct_asset =
-      _wsvQuery->getAccountAsset(query.accountId(), query.assetId());
+  auto acct_assets = _wsvQuery->getAccountAssets(query.accountId());
 
-  if (not acct_asset) {
+  if (not acct_assets) {
     return buildError<shared_model::interface::NoAccountAssetsErrorResponse>();
   }
-
-  const auto &account_asset = **acct_asset;
-  auto response =
-      QueryResponseBuilder().accountAssetResponse(account_asset.assetId(),
-                                                  account_asset.accountId(),
-                                                  account_asset.balance());
+  std::vector<shared_model::proto::AccountAsset> account_assets;
+  for (auto asset : *acct_assets) {
+    // TODO: IR-1239 remove static cast when query response builder is updated
+    // and accepts interface objects
+    account_assets.push_back(
+        *std::static_pointer_cast<shared_model::proto::AccountAsset>(asset));
+  }
+  auto response = QueryResponseBuilder().accountAssetResponse(account_assets);
   return response;
 }
 
@@ -318,7 +296,7 @@ QueryProcessingFactory::executeGetTransactions(
 
   std::vector<shared_model::proto::Transaction> txs;
   bool can_get_all =
-      checkAccountRolePermission(accountId, *_wsvQuery, can_get_all_txs);
+      checkAccountRolePermission(accountId, *_wsvQuery, Role::kGetAllTxs);
   transactions.subscribe([&](const auto &tx) {
     if (tx) {
       auto proto_tx =
@@ -340,6 +318,16 @@ QueryProcessingFactory::executeGetSignatories(
     return buildError<shared_model::interface::NoSignatoriesErrorResponse>();
   }
   auto response = QueryResponseBuilder().signatoriesResponse(*signs);
+  return response;
+}
+
+QueryProcessingFactory::QueryResponseBuilderDone
+QueryProcessingFactory::executeGetPendingTransactions(
+    const shared_model::interface::GetPendingTransactions &query,
+    const shared_model::interface::types::AccountIdType &query_creator) {
+  std::vector<shared_model::proto::Transaction> txs;
+  // TODO 2018-07-04, igor-egorov, IR-1486, the core logic is to be implemented
+  auto response = QueryResponseBuilder().transactionsResponse(txs);
   return response;
 }
 
@@ -429,6 +417,11 @@ QueryProcessingFactory::validateAndExecute(
         } else {
           builder = executeGetAssetInfo(q);
         }
+        return clone(builder.queryHash(query_hash).build());
+      },
+      [&](const shared_model::interface::GetPendingTransactions &q) {
+        // the query does not require validation
+        builder = executeGetPendingTransactions(q, query.creatorAccountId());
         return clone(builder.queryHash(query_hash).build());
       }
 

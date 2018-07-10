@@ -6,15 +6,14 @@
 #include <gtest/gtest.h>
 #include "framework/integration_framework/integration_test_framework.hpp"
 #include "integration/acceptance/acceptance_fixture.hpp"
-#include "validators/permissions.hpp"
 
 using namespace integration_framework;
 using namespace shared_model;
 
 class AddAssetQuantity : public AcceptanceFixture {
  public:
-  auto makeUserWithPerms(const std::vector<std::string> &perms = {
-                             shared_model::permissions::can_add_asset_qty}) {
+  auto makeUserWithPerms(const interface::RolePermissionSet &perms = {
+                             interface::permissions::Role::kAddAssetQty}) {
     return AcceptanceFixture::makeUserWithPerms(perms);
   }
 
@@ -32,7 +31,7 @@ TEST_F(AddAssetQuantity, Basic) {
       .sendTx(makeUserWithPerms())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(kUserId, kAsset, kAmount)))
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 1); })
@@ -47,10 +46,10 @@ TEST_F(AddAssetQuantity, Basic) {
 TEST_F(AddAssetQuantity, NoPermissions) {
   IntegrationTestFramework(1)
       .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms({shared_model::permissions::can_get_my_txs}))
+      .sendTx(makeUserWithPerms({interface::permissions::Role::kGetMyTxs}))
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(kUserId, kAsset, kAmount)))
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
@@ -69,7 +68,7 @@ TEST_F(AddAssetQuantity, NegativeAmount) {
       .sendTx(makeUserWithPerms())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(kUserId, kAsset, "-1.0")),
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, "-1.0")),
               checkStatelessInvalid);
 }
 
@@ -85,7 +84,7 @@ TEST_F(AddAssetQuantity, ZeroAmount) {
       .sendTx(makeUserWithPerms())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(kUserId, kAsset, "0.0")),
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, "0.0")),
               checkStatelessInvalid);
 }
 
@@ -106,33 +105,12 @@ TEST_F(AddAssetQuantity, Uint256DestOverflow) {
       .skipProposal()
       .skipBlock()
       // Add first half of the maximum
-      .sendTx(
-          complete(baseTx().addAssetQuantity(kUserId, kAsset, uint256_halfmax)))
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, uint256_halfmax)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 1); })
       // Add second half of the maximum
-      .sendTx(
-          complete(baseTx().addAssetQuantity(kUserId, kAsset, uint256_halfmax)))
-      .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
-      .done();
-}
-
-/**
- * @given some user with all required permissions
- * @when execute tx with AddAssetQuantity command with nonexistent account
- * @then there is an empty proposal
- */
-TEST_F(AddAssetQuantity, NonexistentAccount) {
-  std::string nonexistent = "inexist@test";
-  IntegrationTestFramework(1)
-      .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms())
-      .skipProposal()
-      .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(nonexistent, kAsset, kAmount)))
+      .sendTx(complete(baseTx().addAssetQuantity(kAsset, uint256_halfmax)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
@@ -151,70 +129,9 @@ TEST_F(AddAssetQuantity, NonexistentAsset) {
       .sendTx(makeUserWithPerms())
       .skipProposal()
       .skipBlock()
-      .sendTx(
-          complete(baseTx().addAssetQuantity(kUserId, nonexistent, kAmount)))
+      .sendTx(complete(baseTx().addAssetQuantity(nonexistent, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
       .done();
-}
-
-/**
- * @given some user with all required permission
- * @when execute tx with AddAssetQuantity command to some other user
- * @then there is no tx in proposal
- */
-TEST_F(AddAssetQuantity, OtherUser) {
-  IntegrationTestFramework(1)
-      .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms())
-      .skipProposal()
-      .skipBlock()
-      .sendTx(complete(baseTx().addAssetQuantity(
-          IntegrationTestFramework::kAdminId, kAsset, kAmount)))
-      .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
-      .done();
-}
-
-/**
- * @given pair of user in different domains with all required permission
- * @when first one execute a tx with AddAssetQuantity command to the second one
- * @then the tx hasn't passed stateless validation
- *       (aka skipProposal throws)
- */
-TEST_F(AddAssetQuantity, OtherDomain) {
-  const auto kNewRole = "newrl";
-  const auto kNewDomain = "newdom";
-  const auto kNewUser = "newusr";
-  IntegrationTestFramework(2)
-      .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms())
-      // Generate new domain, new user and an asset
-      .sendTx(
-          TestUnsignedTransactionBuilder()
-              .creatorAccountId(
-                  integration_framework::IntegrationTestFramework::kAdminId)
-              .createdTime(iroha::time::now())
-              .createRole(kNewRole,
-                          std::vector<std::string>{
-                              shared_model::permissions::can_get_my_txs})
-              .createDomain(kNewDomain, kNewRole)
-              .createAccount(
-                  kNewUser,
-                  kNewDomain,
-                  crypto::DefaultCryptoAlgorithmType::generateKeypair()
-                      .publicKey())
-              .createAsset(IntegrationTestFramework::kAssetName, kNewDomain, 1)
-              .quorum(1)
-              .build()
-              .signAndAddSignature(kAdminKeypair)
-              .finish())
-      .skipProposal()
-      // Make sure everything is committed
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 2); })
-      .sendTx(complete(baseTx().addAssetQuantity(kNewUser, kAsset, kAmount)),
-              checkStatelessInvalid);
 }

@@ -21,13 +21,15 @@ TEST(BlockBuilderTest, BlockWithTransactions) {
           .createdTime(iroha::time::now())
           .creatorAccountId("admin@test")
           .quorum(1)
-          .addAssetQuantity("admin@test", "coin#test", "1.0")
+          .addAssetQuantity("coin#test", "1.0")
           .build();
 
   ASSERT_NO_THROW(
       BlockBuilder()
           .createdTime(iroha::time::now())
-          .prevHash(shared_model::crypto::Hash(std::string(32, '0')))
+          .prevHash(shared_model::crypto::Hash(std::string(
+              shared_model::crypto::DefaultCryptoAlgorithmType::kHashLength,
+              '0')))
           .height(1)
           .transactions(std::vector<decltype(tx)>{tx})
           .build());
@@ -44,7 +46,9 @@ TEST(BlockBuilderTest, DISABLED_BlockWithNoTransactions) {
   ASSERT_ANY_THROW(
       BlockBuilder()
           .createdTime(iroha::time::now())
-          .prevHash(shared_model::crypto::Hash(std::string(32, '0')))
+          .prevHash(shared_model::crypto::Hash(std::string(
+              shared_model::crypto::DefaultCryptoAlgorithmType::kHashLength,
+              '0')))
           .height(1)
           .transactions(std::vector<shared_model::proto::Transaction>())
           .build());

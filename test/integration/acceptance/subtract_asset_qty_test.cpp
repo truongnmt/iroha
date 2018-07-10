@@ -9,7 +9,6 @@
 #include "framework/integration_framework/integration_test_framework.hpp"
 #include "integration/acceptance/acceptance_fixture.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
-#include "validators/permissions.hpp"
 
 using namespace integration_framework;
 using namespace shared_model;
@@ -21,9 +20,9 @@ class SubtractAssetQuantity : public AcceptanceFixture {
    * @param perms are the permissions of the user
    * @return built tx and a hash of its payload
    */
-  auto makeUserWithPerms(const std::vector<std::string> &perms = {
-                             shared_model::permissions::can_subtract_asset_qty,
-                             shared_model::permissions::can_add_asset_qty}) {
+  auto makeUserWithPerms(const interface::RolePermissionSet &perms = {
+                             interface::permissions::Role::kSubtractAssetQty,
+                             interface::permissions::Role::kAddAssetQty}) {
     return AcceptanceFixture::makeUserWithPerms(perms);
   }
 
@@ -31,7 +30,7 @@ class SubtractAssetQuantity : public AcceptanceFixture {
    * @return built tx that adds kAmount assets to the users
    */
   auto replenish() {
-    return complete(baseTx().addAssetQuantity(kUserId, kAsset, kAmount));
+    return complete(baseTx().addAssetQuantity(kAsset, kAmount));
   }
 
   const std::string kAmount = "1.0";
@@ -51,8 +50,7 @@ TEST_F(SubtractAssetQuantity, Everything) {
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(
-          complete(baseTx().subtractAssetQuantity(kUserId, kAsset, kAmount)))
+      .sendTx(complete(baseTx().subtractAssetQuantity(kAsset, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 1); })
@@ -74,7 +72,7 @@ TEST_F(SubtractAssetQuantity, Overdraft) {
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().subtractAssetQuantity(kUserId, kAsset, "2.0")))
+      .sendTx(complete(baseTx().subtractAssetQuantity(kAsset, "2.0")))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
@@ -89,14 +87,13 @@ TEST_F(SubtractAssetQuantity, Overdraft) {
 TEST_F(SubtractAssetQuantity, NoPermissions) {
   IntegrationTestFramework(1)
       .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms({shared_model::permissions::can_add_asset_qty}))
+      .sendTx(makeUserWithPerms({interface::permissions::Role::kAddAssetQty}))
       .skipProposal()
       .skipBlock()
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(
-          complete(baseTx().subtractAssetQuantity(kUserId, kAsset, kAmount)))
+      .sendTx(complete(baseTx().subtractAssetQuantity(kAsset, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
@@ -110,13 +107,15 @@ TEST_F(SubtractAssetQuantity, NoPermissions) {
  *       (aka skipProposal throws)
  */
 TEST_F(SubtractAssetQuantity, NegativeAmount) {
-  IntegrationTestFramework(2)
+  IntegrationTestFramework(1)
       .setInitialState(kAdminKeypair)
       .sendTx(makeUserWithPerms())
+      .skipProposal()
+      .skipBlock()
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(baseTx().subtractAssetQuantity(kUserId, kAsset, "-1.0")),
+      .sendTx(complete(baseTx().subtractAssetQuantity(kAsset, "-1.0")),
               checkStatelessInvalid);
 }
 
@@ -127,23 +126,6 @@ TEST_F(SubtractAssetQuantity, NegativeAmount) {
  *       (aka skipProposal throws)
  */
 TEST_F(SubtractAssetQuantity, ZeroAmount) {
-  IntegrationTestFramework(2)
-      .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms())
-      .sendTx(replenish())
-      .skipProposal()
-      .skipBlock()
-      .sendTx(complete(baseTx().subtractAssetQuantity(kUserId, kAsset, "0.0")),
-              checkStatelessInvalid);
-}
-
-/**
- * @given some user with all required permissions
- * @when execute tx with SubtractAssetQuantity command with nonexitent account
- * @then there is an empty proposal
- */
-TEST_F(SubtractAssetQuantity, NonexistentAccount) {
-  std::string nonexistent = "inexist@test";
   IntegrationTestFramework(1)
       .setInitialState(kAdminKeypair)
       .sendTx(makeUserWithPerms())
@@ -152,12 +134,8 @@ TEST_F(SubtractAssetQuantity, NonexistentAccount) {
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(
-          baseTx().subtractAssetQuantity(nonexistent, kAsset, kAmount)))
-      .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
-      .done();
+      .sendTx(complete(baseTx().subtractAssetQuantity(kAsset, "0.0")),
+              checkStatelessInvalid);
 }
 
 /**
@@ -175,30 +153,7 @@ TEST_F(SubtractAssetQuantity, NonexistentAsset) {
       .sendTx(replenish())
       .skipProposal()
       .skipBlock()
-      .sendTx(complete(
-          baseTx().subtractAssetQuantity(kUserId, nonexistent, kAmount)))
-      .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
-      .done();
-}
-
-/**
- * @given some user with all required permissions
- * @when execute tx with SubtractAssetQuantity command to some other user
- * @then there is no tx in proposal
- */
-TEST_F(SubtractAssetQuantity, OtherUser) {
-  IntegrationTestFramework(1)
-      .setInitialState(kAdminKeypair)
-      .sendTx(makeUserWithPerms())
-      .skipProposal()
-      .skipBlock()
-      .sendTx(replenish())
-      .skipProposal()
-      .skipBlock()
-      .sendTx(complete(baseTx().subtractAssetQuantity(
-          IntegrationTestFramework::kAdminId, kAsset, kAmount)))
+      .sendTx(complete(baseTx().subtractAssetQuantity(nonexistent, kAmount)))
       .skipProposal()
       .checkBlock(
           [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })

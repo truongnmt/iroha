@@ -9,6 +9,7 @@ properties([parameters([
   choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'build_type'),
   booleanParam(defaultValue: false, description: 'Build Java bindings', name: 'JavaBindings'),
   choice(choices: 'Release\nDebug', description: 'Java bindings build type', name: 'JBBuildType'),
+  string(defaultValue: 'jp.co.soramitsu.iroha', description: 'Java bindings package name', name: 'JBPackageName'),
   booleanParam(defaultValue: false, description: 'Build Python bindings', name: 'PythonBindings'),
   choice(choices: 'Release\nDebug', description: 'Python bindings build type', name: 'PBBuildType'),
   choice(choices: 'python3\npython2', description: 'Python bindings version', name: 'PBVersion'),
@@ -203,9 +204,9 @@ pipeline {
                 pg_ctl -D /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/ -o '-p 5433' -l /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/events.log start; \
                 psql -h localhost -d postgres -p 5433 -U ${IROHA_POSTGRES_USER} --file=<(echo create database ${IROHA_POSTGRES_USER};)
               """
-              def testExitCode = sh(script: 'IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 cmake --build build --target test', returnStatus: true)
+              def testExitCode = sh(script: """cd build && IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 ctest --output-on-failure """, returnStatus: true)
               if (testExitCode != 0) {
-                currentBuild.currentResult = "UNSTABLE"
+                currentBuild.result = "UNSTABLE"
               }
               if ( coverageEnabled ) {
                 sh "cmake --build build --target cppcheck"
@@ -410,7 +411,7 @@ pipeline {
                   ['PARALLELISM': params.PARALLELISM])
                 if (params.JavaBindings) {
                   iC.inside("-v /tmp/${env.GIT_COMMIT}/bindings-artifact:/tmp/bindings-artifact") {
-                    bindings.doJavaBindings('linux', params.JBBuildType)
+                    bindings.doJavaBindings('linux', params.JBPackageName, params.JBBuildType)
                   }
                 }
                 if (params.PythonBindings) {
@@ -469,7 +470,7 @@ pipeline {
             script {
               def bindings = load ".jenkinsci/bindings.groovy"
               if (params.JavaBindings) {
-                bindings.doJavaBindings('windows', params.JBBuildType)
+                bindings.doJavaBindings('windows', params.JBPackageName, params.JBBuildType)
               }
               if (params.PythonBindings) {
                 bindings.doPythonBindings('windows', params.PBBuildType)
