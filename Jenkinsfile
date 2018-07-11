@@ -517,7 +517,7 @@ pipeline {
             beforeAgent true
             expression { return params.x86_64_macos }
           }
-          agent { label 'mac' }
+          agent { label 'mac-173' }
           steps {
             script {
               def bindings = load ".jenkinsci/bindings.groovy"

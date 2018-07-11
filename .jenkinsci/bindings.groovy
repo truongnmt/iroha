@@ -51,7 +51,11 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (os == 'mac') {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
-    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/Users/administrator/.pyenv/versions/3.5.5/bin/python'
+    cmakeOptions = """
+      -DPYTHON_INCLUDE_DIR=/Users/jenkins/.pyenv/versions/3.5.5/include/python3.5m/ \
+      -DPYTHON_LIBRARY=/Users/jenkins/.pyenv/versions/3.5.5/lib/libpython3.5m.a \
+      -DPYTHON_EXECUTABLE=/Users/jenkins/.pyenv/versions/3.5.5/bin/python3.5
+    """
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
@@ -71,7 +75,7 @@ def doPythonBindings(os, buildType=Release) {
   sh "cmake --build build --target irohapy -- ${parallelismParam}"
   sh "cmake --build build --target python_tests"
   sh "cd build; ctest -R python --output-on-failure"
-  if (os == 'linux') {
+  if (os == 'linux' || os == 'mac') {
     sh """
       protoc --proto_path=shared_model/schema \
         --python_out=build/bindings shared_model/schema/*.proto
@@ -81,19 +85,6 @@ def doPythonBindings(os, buildType=Release) {
         --grpc_python_out=build/bindings shared_model/schema/endpoint.proto
     """
   }
-
-  else if (os == 'mac') {
-    sh """
-      protoc --proto_path=schema \
-        --python_out=build/shared_model/bindings \
-        block.proto primitive.proto commands.proto queries.proto responses.proto endpoint.proto
-    """
-    sh """
-      python -m grpc_tools.protoc --proto_path=schema --python_out=build/shared_model/bindings \
-        --grpc_python_out=build/shared_model/bindings endpoint.proto yac.proto ordering.proto loader.proto
-    """
-  }
-
   else if (os == 'windows') {
     sh """
       protoc --proto_path=shared_model/schema \
@@ -107,21 +98,11 @@ def doPythonBindings(os, buildType=Release) {
         shared_model/schema/endpoint.proto
     """
   }
-
-  if (os == "mac") {
-    sh """
-      zip -j $artifactsPath build/shared_model/bindings/*.py build/shared_model/bindings/*.dll build/shared_model/bindings/*.so \
-        build/shared_model/bindings/*.py build/shared_model/bindings/*.pyd build/shared_model/bindings/*.lib build/shared_model/bindings/*.dll \
-        build/shared_model/bindings/*.exp build/shared_model/bindings/*.manifest
-      """
-    }
-  else {
-    sh """
-      zip -j $artifactsPath build/bindings/*.py build/bindings/*.dll build/bindings/*.so \
-        build/bindings/*.py build/bindings/*.pyd build/bindings/*.lib build/bindings/*.dll \
-        build/bindings/*.exp build/bindings/*.manifest
-      """
-  }
+  sh """
+    zip -j $artifactsPath build/bindings/*.py build/bindings/*.dll build/bindings/*.so \
+      build/bindings/*.py build/bindings/*.pyd build/bindings/*.lib build/bindings/*.dll \
+      build/bindings/*.exp build/bindings/*.manifest
+  """
   if (os == 'windows' || os == 'mac') {
     sh "cp $artifactsPath /tmp/${env.GIT_COMMIT}/bindings-artifact"
   }
@@ -173,7 +154,7 @@ def doPythonWheels(os, buildType) {
   else {
     version = "develop"
     repo = "develop"
-    if (env.nightly == true) {
+    if (params.nightly == true) {
       version += "-nightly"
       repo += "-nightly"
     }
@@ -181,16 +162,11 @@ def doPythonWheels(os, buildType) {
   }
 
 
-  sh "mkdir -p wheels/iroha;"
-  if (os == 'mac') {
-    sh "cp build/shared_model/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;"
-  }
-  else {
-    sh "cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;"
-  }
   sh """
-  cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
-  cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
+    mkdir -p wheels/iroha; \
+    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;
+    cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
+    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/;
   """
   if (os == 'mac') {
     sh "sed -i '' 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
