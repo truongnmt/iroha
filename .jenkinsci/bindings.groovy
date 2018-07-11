@@ -198,10 +198,10 @@ def doPythonWheels(os, buildType) {
   else {
     sh "sed -i 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
   }
-  sh """
-    modules=($(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\/iroha\///g' | grep '\.py$' | sed -e 's/\..*$//')); \
-    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
-  """
+  // sh """
+  //   modules=($(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\/iroha\///g' | grep '\.py$' | sed -e 's/\..*$//')); \
+  //   for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
+  // """
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"
   }
