@@ -49,6 +49,10 @@ def doPythonBindings(os, buildType=Release) {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
+  if (os == 'mac') {
+    sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
+    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/libs/ibpython3.5m.a'
+  }
   if (os == 'linux') {
     // do not use preinstalled libed25519
     sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
@@ -77,6 +81,19 @@ def doPythonBindings(os, buildType=Release) {
         --grpc_python_out=build/bindings shared_model/schema/endpoint.proto
     """
   }
+
+  else if (os == 'mac') {
+    sh """
+      protoc --proto_path=schema \
+        --python_out=build/shared_model/bindings \
+        block.proto primitive.proto commands.proto queries.proto responses.proto endpoint.proto
+    """
+    sh """
+      python -m grpc_tools.protoc --proto_path=schema --python_out=build/shared_model/bindings \
+        --grpc_python_out=build/shared_model/bindings endpoint.proto yac.proto ordering.proto loader.proto
+    """
+  }
+
   else if (os == 'windows') {
     sh """
       protoc --proto_path=shared_model/schema \
@@ -90,12 +107,22 @@ def doPythonBindings(os, buildType=Release) {
         shared_model/schema/endpoint.proto
     """
   }
-  sh """
-    zip -j $artifactsPath build/bindings/*.py build/bindings/*.dll build/bindings/*.so \
-      build/bindings/*.py build/bindings/*.pyd build/bindings/*.lib build/bindings/*.dll \
-      build/bindings/*.exp build/bindings/*.manifest
-    """
-  if (os == 'windows') {
+
+  if (os == "mac") {
+    sh """
+      zip -j $artifactsPath build/shared_model/bindings/*.py build/shared_model/bindings/*.dll build/shared_model/bindings/*.so \
+        build/shared_model/bindings/*.py build/shared_model/bindings/*.pyd build/shared_model/bindings/*.lib build/shared_model/bindings/*.dll \
+        build/shared_model/bindings/*.exp build/shared_model/bindings/*.manifest
+      """
+    }
+  else {
+    sh """
+      zip -j $artifactsPath build/bindings/*.py build/bindings/*.dll build/bindings/*.so \
+        build/bindings/*.py build/bindings/*.pyd build/bindings/*.lib build/bindings/*.dll \
+        build/bindings/*.exp build/bindings/*.manifest
+      """
+  }
+  if (os == 'windows' || os == 'mac') {
     sh "cp $artifactsPath /tmp/${env.GIT_COMMIT}/bindings-artifact"
   }
   else {
@@ -136,8 +163,9 @@ def doPythonWheels(os, buildType) {
   def version;
   def repo;
   def envs
-  if (os == 'windows') { envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5" }
-  else if (os == 'linux') { envs = (env.PBVersion == "python2") ? "pip" : "pip3" }
+  if (os == 'linux') { envs = (env.PBVersion == "python2") ? "pip" : "pip3" }
+  else if (os == 'mac') { envs = (env.PBVersion == "python2") ? "2.7.15" : "3.5.5" }
+  else if (os == 'windows') { envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5" }
   if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
     version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
     repo = "release"
@@ -152,24 +180,39 @@ def doPythonWheels(os, buildType) {
     version +="-${env.GIT_COMMIT.substring(0,8)}"
   }
 
-  sh """
+
+  sh "mkdir -p wheels/iroha;"
+  if (os == 'mac') {
+    sh "cp build/shared_model/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;"
+  }
+  else {
+    sh "cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;"
+  }
+    sh """
     mkdir -p wheels/iroha; \
-    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
+    cp build/shared_model/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
     cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels; \
     cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
     sed -i 's/{{ PYPI_VERSION }}/${version}/' wheels/setup.py; \
-    modules=(block_pb2 commands_pb2 endpoint_pb2 endpoint_pb2_grpc iroha loader_pb2 loader_pb2_grpc ordering_pb2 ordering_pb2_grpc primitive_pb2 queries_pb2 responses_pb2 yac_pb2 yac_pb2_grpc); \
+    modules=($(find wheels/iroha -type f -not -name "__init__.py" | sed "s/wheels\/iroha\///g" | grep "\.py$" | sed -e 's/\..*$//')) \
     for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i -E "s/import \$m/from . import \$m/g" \$f; done; done; \
   """
-  if (os == 'windows') {
+  if (os == 'linux') {
+    sh "${envs} wheel --no-deps wheels/;"
+  }
+  else if (os == 'mac') {
+    sh """
+      pyenv global ${envs}; \
+      pip wheel --no-deps wheels/; \
+      pyenv global 3.5.5;
+    """
+  }
+  else if (os == 'windows') {
     sh """
       source activate ${envs}; \
       pip wheel --no-deps wheels/; \
       source deactivate;
     """
-  }
-  else if (os == 'linux') {
-    sh "${envs} wheel --no-deps wheels/;"
   }
 
   if (env.PBBuildType == "Release")

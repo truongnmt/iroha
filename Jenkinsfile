@@ -512,6 +512,44 @@ pipeline {
             }
           }
         }
+        stage('Mac OS bindings') {
+          when {
+            beforeAgent true
+            expression { return params.x86_64_macos }
+          }
+          agent { label 'mac' }
+          steps {
+            script {
+              def bindings = load ".jenkinsci/bindings.groovy"
+              if (params.JavaBindings) {
+                bindings.doJavaBindings('mac', params.JBPackageName, params.JBBuildType)
+              }
+              if (params.PythonBindings) {
+                bindings.doPythonBindings('mac', params.PBBuildType)
+              }
+            }
+          }
+          post {
+            success {
+              script {
+                def artifacts = load ".jenkinsci/artifacts.groovy"
+                def commit = env.GIT_COMMIT
+                if (params.JavaBindings) {
+                  javaBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/java-bindings-*.zip' ]
+                  artifacts.uploadArtifacts(javaBindingsFilePaths, '/iroha/bindings/java')
+                }
+                if (params.PythonBindings) {
+                  pythonBindingsFilePaths = [ '/tmp/${GIT_COMMIT}/bindings-artifact/python-bindings-*.zip' ]
+                  artifacts.uploadArtifacts(pythonBindingsFilePaths, '/iroha/bindings/python')
+                }
+              }
+            }
+            cleanup {
+              sh "rm -rf /tmp/${env.GIT_COMMIT}"
+              cleanWs()
+            }
+          }
+        }
         stage ('Windows bindings') {
           when {
             beforeAgent true
