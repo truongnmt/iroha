@@ -23,11 +23,12 @@ namespace shared_model {
         return "";
       // beginning of a batch
       if (not batch1) {
-        if (batch2.get()->transactionHashes().size() == 0)
+        if (batch2.get()->transactionHashes().size() == 0) {
           return (boost::format("Tx %s has a batch of 0 transactions")
                   % tr2->hash().hex())
               .str();
-        if (batch2.get()->transactionHashes().front() != tr2->reduced_hash())
+        }
+        if (batch2.get()->transactionHashes().front() != tr2->reduced_hash()) {
           return (boost::format("Tx %s is a first transaction of a batch, but "
                                 "it's reduced hash %s doesn't match the first "
                                 "reduced hash in batch %s")
@@ -35,11 +36,12 @@ namespace shared_model {
                   % batch2.get()->transactionHashes().front().hex()
                   % tr2->reduced_hash().hex())
               .str();
+        }
         return "";
       }
       // end of a batch
       if (not batch2) {
-        if (batch1.get()->transactionHashes().back() != tr1->reduced_hash())
+        if (batch1.get()->transactionHashes().back() != tr1->reduced_hash()) {
           return (boost::format("Tx %s is a last transaction of a batch, but "
                                 "it's reduced hash %s doesn't match the last "
                                 "reduced hash in batch %s")
@@ -47,6 +49,7 @@ namespace shared_model {
                   % batch1.get()->transactionHashes().back().hex()
                   % tr1->reduced_hash().hex())
               .str();
+        }
         return "";
       }
       // inside of a batch
@@ -60,8 +63,9 @@ namespace shared_model {
           or *next(it1) != *it2) {
         // end of the bach and beginning of the next
         if (canFollow(tr1, boost::none) == ""
-            and canFollow(boost::none, tr2) == "")
+            and canFollow(boost::none, tr2) == "") {
           return "";
+        }
         return (boost::format("Tx %s is followed by %s, but their reduced"
                               "hashed doesn't follow each other in their batch"
                               "meta")

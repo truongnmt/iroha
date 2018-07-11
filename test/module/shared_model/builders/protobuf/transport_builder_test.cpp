@@ -1,23 +1,9 @@
 /**
- * Copyright Soramitsu Co., Ltd. 2018 All Rights Reserved.
- * http://soramitsu.co.jp
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *        http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include <gtest/gtest.h>
-#include <interfaces/iroha_internal/transaction_sequence.hpp>
-#include <validators/transactions_collection/batch_order_validator.hpp>
 
 #include "block.pb.h"
 #include "builders/protobuf/block.hpp"
@@ -31,16 +17,26 @@
 #include "common/types.hpp"
 #include "framework/result_fixture.hpp"
 #include "interfaces/common_objects/types.hpp"
+#include "interfaces/iroha_internal/transaction_sequence.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_empty_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_query_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
+#include "validators/transactions_collection/batch_order_validator.hpp"
 
 using namespace shared_model;
 using namespace shared_model::proto;
 using namespace iroha::expected;
 using iroha::operator|;
+
+using TransactionSequenceBuilder = TransportBuilder<
+    interface::TransactionSequence,
+    validation::SignedTransactionsCollectionValidator<
+        validation::TransactionValidator<
+            validation::FieldValidator,
+            validation::CommandValidatorVisitor<validation::FieldValidator>>,
+        validation::BatchOrderValidator>>;
 
 class TransportBuilderTest : public ::testing::Test {
  protected:
@@ -514,14 +510,7 @@ TEST_F(TransportBuilderTest, TransactionSequenceCorrect) {
       std::begin(batch3), std::end(batch3), std::back_inserter(transactions));
   transactions.push_back(createTransaction());
   auto val = framework::expected::val(
-      TransportBuilder<interface::TransactionSequence,
-                       validation::SignedTransactionsCollectionValidator<
-                           validation::TransactionValidator<
-                               validation::FieldValidator,
-                               validation::CommandValidatorVisitor<
-                                   validation::FieldValidator>>,
-                           validation::BatchOrderValidator>>()
-          .build(transactions));
+      TransactionSequenceBuilder().build(transactions));
   ASSERT_TRUE(val);
   val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 24); };
 }
@@ -540,14 +529,7 @@ TEST_F(TransportBuilderTest, TransactionInteraptedBatch) {
   std::move(
       std::begin(batch) + 3, std::end(batch), std::back_inserter(transactions));
   auto error = framework::expected::err(
-      TransportBuilder<interface::TransactionSequence,
-                       validation::SignedTransactionsCollectionValidator<
-                           validation::TransactionValidator<
-                               validation::FieldValidator,
-                               validation::CommandValidatorVisitor<
-                                   validation::FieldValidator>>,
-                           validation::BatchOrderValidator>>()
-          .build(transactions));
+      TransactionSequenceBuilder().build(transactions));
   ASSERT_TRUE(error);
 }
 
@@ -565,14 +547,6 @@ TEST_F(TransportBuilderTest, BatchWrongOrder) {
             std::begin(batch) + 3,
             std::back_inserter(transactions));
   auto error = framework::expected::err(
-      TransportBuilder<interface::TransactionSequence,
-                       validation::SignedTransactionsCollectionValidator<
-                           validation::TransactionValidator<
-                               validation::FieldValidator,
-                               validation::CommandValidatorVisitor<
-                                   validation::FieldValidator>>,
-                           validation::BatchOrderValidator>>()
-          .build(transactions));
+      TransactionSequenceBuilder().build(transactions));
   ASSERT_TRUE(error);
 }
-

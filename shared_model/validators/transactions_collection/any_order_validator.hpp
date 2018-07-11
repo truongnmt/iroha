@@ -1,6 +1,7 @@
-//
-// Created by Sergei Solonets on 09/07/2018.
-//
+/**
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #ifndef IROHA_ANY_ORDER_VALIDATOR_HPP
 #define IROHA_ANY_ORDER_VALIDATOR_HPP

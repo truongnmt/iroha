@@ -49,12 +49,13 @@ namespace shared_model {
 
       /**
        * Builds TransactionSequence from transport object
-       * @param transport -- protobuf object from which TransactionSequence is
+       * @param transport protobuf object from which TransactionSequence is
        * built
        * @return Result containing either TransactionSequence or message string
        */
+      template <class T>
       iroha::expected::Result<interface::TransactionSequence, std::string>
-      build(interface::types::TransactionsForwardCollectionType transport) {
+      build(T &transport) {
         return createTransactionSequence(transport, stateless_validator_);
       }
 
