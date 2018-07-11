@@ -19,8 +19,9 @@ namespace shared_model {
       boost::optional<std::shared_ptr<interface::BatchMeta>> batch2 =
           tr2 ? tr2->batch_meta() : boost::none;
       // both transactions are not a part of any batch
-      if (not batch1 and not batch2)
+      if (not batch1 and not batch2) {
         return "";
+      }
       // beginning of a batch
       if (not batch1) {
         if (batch2.get()->transactionHashes().size() == 0) {
