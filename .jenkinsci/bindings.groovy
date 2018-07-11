@@ -188,14 +188,19 @@ def doPythonWheels(os, buildType) {
   else {
     sh "cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;"
   }
-    sh """
-    mkdir -p wheels/iroha; \
-    cp build/shared_model/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels; \
-    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
-    sed -i 's/{{ PYPI_VERSION }}/${version}/' wheels/setup.py; \
+  sh """
+  cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
+  cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
+  """
+  if (os == 'mac') {
+    sh "sed -i '' 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
+  }
+  else {
+    sh "sed -i 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
+  }
+  sh """
     modules=($(find wheels/iroha -type f -not -name "__init__.py" | sed "s/wheels\/iroha\///g" | grep "\.py$" | sed -e 's/\..*$//')) \
-    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i -E "s/import \$m/from . import \$m/g" \$f; done; done; \
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i -E "s/import \$m/from . import \$m/g" \$f; done; done;
   """
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"

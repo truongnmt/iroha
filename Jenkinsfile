@@ -512,7 +512,7 @@ pipeline {
             }
           }
         }
-        stage('Mac OS bindings') {
+        stage('MacOS bindings') {
           when {
             beforeAgent true
             expression { return params.x86_64_macos }
