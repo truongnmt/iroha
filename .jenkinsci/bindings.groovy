@@ -51,7 +51,7 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (os == 'mac') {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
-    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/libs/ibpython3.5m.a'
+    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/lib/libpython3.5m.a'
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
@@ -198,10 +198,10 @@ def doPythonWheels(os, buildType) {
   else {
     sh "sed -i 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
   }
-  // sh """
-  //   modules=($(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\/iroha\///g' | grep '\.py$' | sed -e 's/\..*$//')); \
-  //   for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
-  // """
+  sh """
+    modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
+  """
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"
   }
