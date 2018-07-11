@@ -51,7 +51,7 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (os == 'mac') {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
-    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/lib/libpython3.5m.a'
+    cmakeOptions = '-DPYTHON_INCLUDE_DIR=/Users/administrator/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/administrator/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/Users/administrator/.pyenv/versions/3.5.5/bin/python'
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
