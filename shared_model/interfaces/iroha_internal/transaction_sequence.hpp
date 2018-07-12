@@ -8,6 +8,7 @@
 
 #include "common/result.hpp"
 #include "interfaces/common_objects/transaction_sequence_common.hpp"
+#include "interfaces/iroha_internal/transaction_batch.hpp"
 #include "validators/transactions_collection/transactions_collection_validator.hpp"
 
 namespace shared_model {
@@ -39,22 +40,15 @@ namespace shared_model {
               OrderValidator> &validator);
 
       /**
-       * Get transactions collection
-       * @return transactions collection
-       */
-      types::SharedTxsCollectionType transactions() const;
-
-      /**
        * Get batches in transaction sequence
        * Note that transaction without batch meta are returned as batch with
        * single transaction
        * @return collection of batches from transaction sequence
        */
-      types::BatchesType batches() const;
+      types::BatchesCollectionType batches() const;
 
      private:
-      explicit TransactionSequence(
-          const types::SharedTxsCollectionType &transactions);
+      explicit TransactionSequence(const types::BatchesCollectionType &batches);
 
       /**
        * Get the concatenation of reduced hashes
@@ -64,9 +58,7 @@ namespace shared_model {
       std::string calculateBatchHash(
           std::vector<types::HashType> reduced_hashes) const;
 
-      types::SharedTxsCollectionType transactions_;
-
-      mutable boost::optional<types::BatchesType> batches_;
+      types::BatchesCollectionType batches_;
     };
 
   }  // namespace interface
