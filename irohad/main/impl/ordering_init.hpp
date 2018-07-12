@@ -74,7 +74,7 @@ namespace iroha {
        * @param block_query - block store to get last block height
        * @return efficient implementation of OrderingGate
        */
-      std::shared_ptr<ordering::OrderingGateImpl> initOrderingGate(
+      std::shared_ptr<iroha::network::OrderingGate> initOrderingGate(
           std::shared_ptr<ametsuchi::PeerQuery> wsv,
           size_t max_size,
           std::chrono::milliseconds delay_milliseconds,
@@ -83,7 +83,7 @@ namespace iroha {
           std::shared_ptr<ametsuchi::BlockQuery> block_query);
 
       std::shared_ptr<ordering::SinglePeerOrderingService> ordering_service;
-      std::shared_ptr<ordering::OrderingGateImpl> ordering_gate;
+      std::shared_ptr<iroha::network::OrderingGate> ordering_gate;
       std::shared_ptr<ordering::OrderingGateTransportGrpc>
           ordering_gate_transport;
       std::shared_ptr<ordering::OrderingServiceTransportGrpc>
