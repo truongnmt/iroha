@@ -39,7 +39,10 @@ TEST(TransactionSequenceTest, CreateTransactionSequenceWhenValid) {
       .WillOnce(Return(validation::Answer()));
 
   std::shared_ptr<interface::Transaction> tx(clone(
-      framework::batch::prepareTransactionBuilder("account@domain").build()));
+      framework::batch::prepareTransactionBuilder("account@domain")
+          .batchMeta(shared_model::interface::types::BatchType::ATOMIC,
+                     std::vector<shared_model::interface::types::HashType>{})
+          .build()));
 
   auto tx_sequence = interface::TransactionSequence::createTransactionSequence(
       std::vector<decltype(tx)>{tx, tx, tx}, transactions_validator);
@@ -63,7 +66,10 @@ TEST(TransactionSequenceTest, CreateTransactionSequenceWhenInvalid) {
   EXPECT_CALL(res, validatePointers(_)).WillOnce(Return(answer));
 
   std::shared_ptr<interface::Transaction> tx(clone(
-      framework::batch::prepareTransactionBuilder("account@domain").build()));
+      framework::batch::prepareTransactionBuilder("account@domain")
+          .batchMeta(shared_model::interface::types::BatchType::ATOMIC,
+                     std::vector<shared_model::interface::types::HashType>{})
+          .build()));
 
   auto tx_sequence = interface::TransactionSequence::createTransactionSequence(
       std::vector<decltype(tx)>{tx, tx, tx}, res);
