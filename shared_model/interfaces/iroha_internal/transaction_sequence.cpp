@@ -4,6 +4,7 @@
  */
 
 #include "interfaces/iroha_internal/transaction_sequence.hpp"
+#include "interfaces/iroha_internal/transaction_batch.hpp"
 #include "validators/field_validator.hpp"
 #include "validators/transaction_validator.hpp"
 #include "validators/transactions_collection/batch_order_validator.hpp"
@@ -24,14 +25,6 @@ namespace shared_model {
           extracted_batches;
       std::vector<TransactionBatch> batches;
 
-      auto calculateBatchHash = [](const auto &reduced_hashes) {
-        std::stringstream concatenated_hashes_stream;
-        for (const auto &hash : reduced_hashes) {
-          concatenated_hashes_stream << hash.hex();
-        }
-        return concatenated_hashes_stream.str();
-      };
-
       auto transaction_validator = validator.getTransactionValidator();
 
       auto insert_batch =
@@ -43,7 +36,7 @@ namespace shared_model {
       for (const auto &tx : transactions) {
         if (auto meta = tx->batchMeta()) {
           auto hashes = meta.get()->transactionHashes();
-          auto batch_hash = calculateBatchHash(hashes);
+          auto batch_hash = TransactionBatch::calculateReducedBatchHash(hashes);
           extracted_batches[batch_hash].push_back(tx);
         } else {
           TransactionBatch::createTransactionBatch(tx, transaction_validator)
@@ -98,16 +91,6 @@ namespace shared_model {
     TransactionSequence::TransactionSequence(
         const types::BatchesCollectionType &batches)
         : batches_(batches) {}
-
-    interface::types::HashType TransactionSequence::calculateBatchHash(
-        std::vector<types::HashType> reduced_hashes) {
-      std::stringstream concatenated_hashes_stream;
-      for (const auto &hash : reduced_hashes) {
-        concatenated_hashes_stream << hash.hex();
-      }
-      return interface::types::HashType::fromHexString(
-          concatenated_hashes_stream.str());
-    }
 
   }  // namespace interface
 }  // namespace shared_model

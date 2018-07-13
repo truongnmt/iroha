@@ -50,14 +50,6 @@ namespace shared_model {
      private:
       explicit TransactionSequence(const types::BatchesCollectionType &batches);
 
-      /**
-       * Get the concatenation of reduced hashes
-       * @param reduced_hashes collection of reduced hashes
-       * @return concatenated reduced hashes
-       */
-      static interface::types::HashType calculateBatchHash(
-          std::vector<types::HashType> reduced_hashes);
-
       types::BatchesCollectionType batches_;
     };
 

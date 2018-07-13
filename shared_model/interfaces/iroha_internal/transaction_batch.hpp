@@ -55,12 +55,31 @@ namespace shared_model {
        */
       types::SharedTxsCollectionType transactions() const;
 
+      /**
+       * Get the concatenation of reduced hashes as a single hash
+       * @param reduced_hashes collection of reduced hashes
+       * @return concatenated reduced hashes
+       */
+      types::HashType reducedHash() const;
+
+      /**
+       * Get the concatenation of reduced hashes as a single hash
+       * That kind of hash does not respect batch type
+       * @param reduced_hashes
+       * @return concatenated reduced hashes
+       */
+      static types::HashType calculateReducedBatchHash(
+          const boost::any_range<types::HashType, boost::forward_traversal_tag>
+              &reduced_hashes);
+
      private:
       explicit TransactionBatch(
           const types::SharedTxsCollectionType &transactions)
           : transactions_(transactions) {}
 
       types::SharedTxsCollectionType transactions_;
+
+      mutable boost::optional<types::HashType> reduced_hash_;
     };
   }  // namespace interface
 }  // namespace shared_model

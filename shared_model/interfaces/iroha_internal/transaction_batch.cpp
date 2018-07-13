@@ -104,5 +104,25 @@ namespace shared_model {
       return transactions_;
     }
 
+    types::HashType TransactionBatch::reducedHash() const {
+      if (not reduced_hash_) {
+        reduced_hash_ = TransactionBatch::calculateReducedBatchHash(
+            transactions_ | boost::adaptors::transformed([](const auto &tx) {
+              return tx->reducedHash();
+            }));
+      }
+      return reduced_hash_.value();
+    }
+
+    types::HashType TransactionBatch::calculateReducedBatchHash(
+        const boost::any_range<types::HashType, boost::forward_traversal_tag>
+            &reduced_hashes) {
+      std::stringstream concatenated_hash;
+      for (const auto &hash : reduced_hashes) {
+        concatenated_hash << hash.hex();
+      }
+      return types::HashType::fromHexString(concatenated_hash.str());
+    }
+
   }  // namespace interface
 }  // namespace shared_model
