@@ -18,7 +18,9 @@ namespace shared_model {
         const validation::TransactionsCollectionValidator<TransactionValidator,
                                                           OrderValidator>
             &validator) {
-      std::unordered_map<std::string, std::vector<std::shared_ptr<Transaction>>>
+      std::unordered_map<interface::types::HashType,
+                         std::vector<std::shared_ptr<Transaction>>,
+                         interface::types::HashType::Hasher>
           extracted_batches;
       std::vector<TransactionBatch> batches;
 
@@ -58,7 +60,7 @@ namespace shared_model {
         TransactionBatch::createTransactionBatch(it.second, validator)
             .match(insert_batch, [&it, &result](const auto &err) {
               result.addReason(std::make_pair(
-                  it.first, std::vector<std::string>{err.error}));
+                  it.first.toString(), std::vector<std::string>{err.error}));
             });
       }
 
@@ -97,13 +99,14 @@ namespace shared_model {
         const types::BatchesCollectionType &batches)
         : batches_(batches) {}
 
-    std::string TransactionSequence::calculateBatchHash(
-        std::vector<types::HashType> reduced_hashes) const {
+    interface::types::HashType TransactionSequence::calculateBatchHash(
+        std::vector<types::HashType> reduced_hashes) {
       std::stringstream concatenated_hashes_stream;
       for (const auto &hash : reduced_hashes) {
         concatenated_hashes_stream << hash.hex();
       }
-      return concatenated_hashes_stream.str();
+      return interface::types::HashType::fromHexString(
+          concatenated_hashes_stream.str());
     }
 
   }  // namespace interface

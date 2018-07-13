@@ -53,10 +53,10 @@ namespace shared_model {
       /**
        * Get the concatenation of reduced hashes
        * @param reduced_hashes collection of reduced hashes
-       * @return concatenated redueced hashes
+       * @return concatenated reduced hashes
        */
-      std::string calculateBatchHash(
-          std::vector<types::HashType> reduced_hashes) const;
+      static interface::types::HashType calculateBatchHash(
+          std::vector<types::HashType> reduced_hashes);
 
       types::BatchesCollectionType batches_;
     };
