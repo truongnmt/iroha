@@ -40,6 +40,12 @@ namespace shared_model {
               OrderValidator> &validator);
 
       /**
+       * Retrieves transactions from all batches as single collection
+       * @return all batches transactions
+       */
+      types::SharedTxsCollectionType transactions() const;
+
+      /**
        * Get batches in transaction sequence
        * Note that transaction without batch meta are returned as batch with
        * single transaction

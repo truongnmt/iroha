@@ -84,6 +84,21 @@ namespace shared_model {
                     validation::FieldValidator>>,
             validation::BatchOrderValidator> &validator);
 
+    types::SharedTxsCollectionType TransactionSequence::transactions() const {
+      types::SharedTxsCollectionType result;
+      auto transactions_amount = 0u;
+      for (const auto &batch : batches_) {
+        transactions_amount += batch.transactions().size();
+      }
+      result.reserve(transactions_amount);
+      for (const auto &batch : batches_) {
+        std::copy(batch.transactions().begin(),
+                  batch.transactions().end(),
+                  std::back_inserter(result));
+      }
+      return result;
+    }
+
     types::BatchesCollectionType TransactionSequence::batches() const {
       return batches_;
     }
