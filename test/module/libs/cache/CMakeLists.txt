@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-addtest(cache_test cache_test.cpp)
+addtest(cache_test
+        cache_test.cpp
+        )
 target_link_libraries(cache_test
         torii_service
         )
 
-addtest(transaction_cache_test transaction_cache_test.cpp)
+addtest(transaction_cache_test
+        transaction_cache_test.cpp
+        )
