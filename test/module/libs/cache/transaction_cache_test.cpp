@@ -11,38 +11,44 @@
 
 using namespace iroha::set;
 
+class TransactionCacheTest : public testing::Test {
+ public:
+  uint32_t number_of_calls = 0;
+  std::shared_ptr<CollectionSet<int>> set;
+
+  void SetUp() override {
+    number_of_calls = 0;
+    set = std::make_shared<CollectionSet<int>>();
+  }
+};
+
 /**
  * @given empty set
  * @when  check that empty set doesn't contain elements
  * AND insert some collection
  * @then  check that elements are appeared
  */
-TEST(TransactionCacheTest, insert) {
-  auto number_of_calls = 0;
-  CollectionSet<int> set;
-  set.foreach ([&number_of_calls](const auto &val) { number_of_calls++; });
+TEST_F(TransactionCacheTest, insert) {
+  set->forEach([this](const auto &val) { number_of_calls++; });
   ASSERT_EQ(0, number_of_calls);
 
-  set.insertValues(std::vector<int>({1, 2}));
+  set->insertValues(std::vector<int>({1, 2}));
 
-  set.foreach ([&number_of_calls](const auto &val) { number_of_calls++; });
+  set->forEach([this](const auto &val) { number_of_calls++; });
   ASSERT_EQ(2, number_of_calls);
 }
 
 /**
  * @given empty set
  * @when insert some collection
- * AND insert duplicated
+ * AND insert duplicated elements
  * @then  check that duplicates are not appeared
  */
-TEST(TransactionCacheTest, insertDuplicates) {
-  auto number_of_calls = 0;
-  CollectionSet<int> set;
+TEST_F(TransactionCacheTest, insertDuplicates) {
+  set->insertValues(std::vector<int>({1, 2}));
+  set->insertValues(std::vector<int>({1, 3}));
 
-  set.insertValues(std::vector<int>({1, 2}));
-  set.insertValues(std::vector<int>({1, 3}));
-
-  set.foreach ([&number_of_calls](const auto &val) { number_of_calls++; });
+  set->forEach([this](const auto &val) { number_of_calls++; });
   ASSERT_EQ(3, number_of_calls);
 }
 
@@ -52,12 +58,9 @@ TEST(TransactionCacheTest, insertDuplicates) {
  * AND remove another collection with same and different elements
  * @then  check that duplicates and removed elements are not appeared
  */
-TEST(TransactionCacheTest, remove) {
-  auto number_of_calls = 0;
-  CollectionSet<int> set;
-
-  set.insertValues(std::vector<int>({1, 2, 3}));
-  set.removeValues(std::vector<int>({1, 3, 4}));
-  set.foreach ([&number_of_calls](const auto &val) { number_of_calls++; });
+TEST_F(TransactionCacheTest, remove) {
+  set->insertValues(std::vector<int>({1, 2, 3}));
+  set->removeValues(std::vector<int>({1, 3, 4}));
+  set->forEach([this](const auto &val) { number_of_calls++; });
   ASSERT_EQ(1, number_of_calls);
 }

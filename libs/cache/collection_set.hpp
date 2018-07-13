@@ -25,6 +25,8 @@ namespace iroha {
               typename KeyEqual = std::equal_to<Key>>
     class CollectionSet {
      public:
+      CollectionSet() = default;
+
       using value_type = Key;
 
       /**
@@ -46,7 +48,7 @@ namespace iroha {
       template <typename Collection>
       void removeValues(Collection &&collection) {
         std::lock_guard<std::shared_timed_mutex> lock(mutex_);
-        for (auto val : collection) {
+        for (auto &&val : collection) {
           set_.erase(val);
         }
       }
@@ -57,7 +59,7 @@ namespace iroha {
        * @param callable - functor for invocation on each element
        */
       template <typename Callable>
-      void foreach (Callable &&callable) const {
+      void forEach(Callable &&callable) const {
         std::shared_lock<std::shared_timed_mutex> lock(mutex_);
         std::for_each(set_.begin(), set_.end(), callable);
       }
