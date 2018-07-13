@@ -16,7 +16,11 @@ namespace framework {
      * @return prepared transaction builder
      */
     auto prepareTransactionBuilder(const std::string &creator) {
-      return TestTransactionBuilder().creatorAccountId(creator);
+      return TestTransactionBuilder()
+          .setAccountQuorum(creator, 1)
+          .creatorAccountId(creator)
+          .createdTime(iroha::time::now())
+          .quorum(1);
     }
 
     /**

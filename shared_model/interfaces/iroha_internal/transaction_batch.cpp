@@ -46,7 +46,7 @@ namespace shared_model {
                                                           OrderValidator>
             &validator) {
       auto answer = validator.validatePointers(transactions);
-      if (allTxsInSameBatch(transactions)) {
+      if (not allTxsInSameBatch(transactions)) {
         answer.addReason(std::make_pair(
             "Transaction batch: ",
             std::vector<std::string>{
@@ -69,6 +69,16 @@ namespace shared_model {
                     validation::FieldValidator>>,
             validation::BatchOrderValidator> &validator);
 
+    template iroha::expected::Result<TransactionBatch, std::string>
+    TransactionBatch::createTransactionBatch(
+        const types::SharedTxsCollectionType &transactions,
+        const validation::TransactionsCollectionValidator<
+            validation::TransactionValidator<
+                validation::FieldValidator,
+                validation::CommandValidatorVisitor<
+                    validation::FieldValidator>>,
+            validation::AnyOrderValidator> &validator);
+
     template <typename TransactionValidator>
     iroha::expected::Result<TransactionBatch, std::string>
     TransactionBatch::createTransactionBatch(
@@ -89,6 +99,10 @@ namespace shared_model {
             validation::FieldValidator,
             validation::CommandValidatorVisitor<validation::FieldValidator>>
             &validator);
+
+    types::SharedTxsCollectionType TransactionBatch::transactions() const {
+      return transactions_;
+    }
 
   }  // namespace interface
 }  // namespace shared_model

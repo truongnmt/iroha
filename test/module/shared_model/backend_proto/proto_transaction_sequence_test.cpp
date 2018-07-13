@@ -79,14 +79,15 @@ TEST(TransactionSequenceTest, CreateTransactionSequenceWhenInvalid) {
  * @then expected number of batches is created
  */
 TEST(TransactionSequenceTest, CreateBatches) {
-  MockTransactionCollectionValidator txs_validator;
-
-  EXPECT_CALL(txs_validator, validatePointers(_))
-      .WillOnce(Return(validation::Answer()));
-
   size_t batches_number = 3;
   size_t txs_in_batch = 2;
   size_t single_transactions = 1;
+
+  MockTransactionCollectionValidator txs_validator;
+
+  EXPECT_CALL(txs_validator, validatePointers(_))
+      .Times(batches_number)
+      .WillRepeatedly(Return(validation::Answer()));
 
   interface::types::SharedTxsCollectionType tx_collection;
   for (size_t i = 0; i < batches_number; i++) {
@@ -113,10 +114,16 @@ TEST(TransactionSequenceTest, CreateBatches) {
                                                                 txs_validator);
 
   auto tx_sequence = framework::expected::val(tx_sequence_opt);
-  ASSERT_TRUE(tx_sequence);
+  ASSERT_TRUE(tx_sequence)
+      << framework::expected::err(tx_sequence_opt).value().error;
 
-  ASSERT_EQ(boost::size(tx_sequence->value.transactions()),
-            batches_number * txs_in_batch + single_transactions);
   ASSERT_EQ(boost::size(tx_sequence->value.batches()),
             batches_number + single_transactions);
+
+  size_t total_transactions = boost::accumulate(
+      tx_sequence->value.batches(), 0ul, [](auto sum, const auto &batch) {
+        return sum + boost::size(batch.transactions());
+      });
+  ASSERT_EQ(total_transactions,
+            batches_number * txs_in_batch + single_transactions);
 }

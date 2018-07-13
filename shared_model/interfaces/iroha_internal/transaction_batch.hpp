@@ -49,6 +49,10 @@ namespace shared_model {
                              const TransactionValidator &transaction_validator =
                                  TransactionValidator());
 
+      /**
+       * Get transactions list
+       * @return list of transactions from the batch
+       */
       types::SharedTxsCollectionType transactions() const;
 
      private:
