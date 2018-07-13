@@ -17,31 +17,37 @@ namespace shared_model {
      public:
       TransactionBatch() = delete;
 
+      /**
+       * Create transaction batch out of collection of transactions
+       * @tparam TransactionValidator validates every single transaction
+       * @tparam OrderValidator validates order of transactions
+       * @param transactions collection of transactions, should be from the same
+       * batch
+       * @param validator transactions collection validator with provided
+       * transaction validator and order validator
+       * @return valid batch of transactions
+       */
       template <typename TransactionValidator, typename OrderValidator>
       static iroha::expected::Result<TransactionBatch, std::string>
       createTransactionBatch(const types::SharedTxsCollectionType &transactions,
                              const validation::TransactionsCollectionValidator<
                                  TransactionValidator,
-                                 OrderValidator> &validator) {
-        auto answer = validator.validatePointers(transactions);
-        if (answer.hasErrors()) {
-          return iroha::expected::makeError(answer.reason());
-        }
-        return iroha::expected::makeValue(TransactionBatch(transactions));
-      }
+                                 OrderValidator> &validator);
 
+      /**
+       * Creates transaction batch from single transaction
+       * @tparam TransactionValidator validates every single transaction
+       * @param transaction is transaction being validated and used to create
+       * batch
+       * @param transaction_validator transaction validation logic
+       * @return batch with single transaction
+       * @note transactions in such batches may not have batch meta information
+       */
       template <typename TransactionValidator>
       static iroha::expected::Result<TransactionBatch, std::string>
       createTransactionBatch(std::shared_ptr<Transaction> transaction,
                              const TransactionValidator &transaction_validator =
-                                 TransactionValidator()) {
-        auto answer = transaction_validator.validate(*transaction);
-        if (answer.hasErrors()) {
-          return iroha::expected::makeError(answer.reason());
-        }
-        return iroha::expected::makeValue(
-            TransactionBatch(types::SharedTxsCollectionType{transaction}));
-      };
+                                 TransactionValidator());
 
       types::SharedTxsCollectionType transactions() const;
 
