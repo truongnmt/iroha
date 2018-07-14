@@ -177,14 +177,18 @@ def doPythonWheels(os, buildType) {
   """
   if (os == 'mac') {
     sh "sed -i '' 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
+    sh """
+      modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
+      for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
+    """
   }
   else {
     sh "sed -i 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
+    sh """
+      modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
+      for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i 's/import \$m/from . import \$m/g' \$f; done; done;
+    """
   }
-  sh """
-    modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
-    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
-  """
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"
   }
@@ -205,7 +209,15 @@ def doPythonWheels(os, buildType) {
 
   if (env.PBBuildType == "Release")
     withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-      sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
+      if (os == 'mac') {
+        sh """
+          eval "\$(pyenv init -)"; \
+          twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl
+        """
+      }
+      else {
+        sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
+      }
     }
 }
 return this
