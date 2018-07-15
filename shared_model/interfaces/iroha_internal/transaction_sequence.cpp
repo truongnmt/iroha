@@ -92,8 +92,9 @@ namespace shared_model {
       }
       result.reserve(transactions_amount);
       for (const auto &batch : batches_) {
-        std::copy(batch.transactions().begin(),
-                  batch.transactions().end(),
+        auto transactions = batch.transactions();
+        std::copy(transactions.begin(),
+                  transactions.end(),
                   std::back_inserter(result));
       }
       return result;
