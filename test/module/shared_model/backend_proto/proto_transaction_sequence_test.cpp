@@ -16,7 +16,7 @@ using ::testing::Return;
 using ::testing::Test;
 
 class MockTransactionCollectionValidator
-    : public validation::SignedTransactionsCollectionValidator<
+    : public validation::UnsignedTransactionsCollectionValidator<
           validation::TransactionValidator<validation::FieldValidator,
                                            validation::CommandValidatorVisitor<
                                                validation::FieldValidator>>> {
@@ -25,6 +25,13 @@ class MockTransactionCollectionValidator
       validatePointers,
       validation::Answer(const interface::types::SharedTxsCollectionType &));
 };
+
+shared_model::validation::Answer createAnswerWithErrors() {
+  shared_model::validation::Answer answer;
+  answer.addReason(
+      std::make_pair("transaction", std::vector<std::string>{"some reason"}));
+  return answer;
+}
 
 /**
  * @given Transaction collection of several transactions
@@ -59,11 +66,8 @@ TEST(TransactionSequenceTest, CreateTransactionSequenceWhenValid) {
 TEST(TransactionSequenceTest, CreateTransactionSequenceWhenInvalid) {
   MockTransactionCollectionValidator res;
 
-  validation::Answer answer;
-  answer.addReason(
-      std::make_pair("transaction", std::vector<std::string>{"some reason"}));
-
-  EXPECT_CALL(res, validatePointers(_)).WillOnce(Return(answer));
+  EXPECT_CALL(res, validatePointers(_))
+      .WillOnce(Return(createAnswerWithErrors()));
 
   std::shared_ptr<interface::Transaction> tx(clone(
       framework::batch::prepareTransactionBuilder("account@domain")
