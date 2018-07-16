@@ -51,7 +51,7 @@ namespace shared_model {
        * single transaction
        * @return collection of batches from transaction sequence
        */
-      types::BatchesCollectionType batches() const;
+      const types::BatchesCollectionType& batches() const;
 
      private:
       explicit TransactionSequence(const types::BatchesCollectionType &batches);

@@ -100,7 +100,7 @@ namespace shared_model {
       return result;
     }
 
-    types::BatchesCollectionType TransactionSequence::batches() const {
+    const types::BatchesCollectionType& TransactionSequence::batches() const {
       return batches_;
     }
 
