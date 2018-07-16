@@ -4,7 +4,7 @@
 #
 
 add_library(shared_model_proto_backend
-    block.cpp
+    impl/block.cpp
     proposal.cpp
     impl/permissions.cpp
     commands/impl/proto_add_asset_quantity.cpp
