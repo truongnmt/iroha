@@ -198,6 +198,10 @@ BENCHMARK_DEFINE_F(ProposalBenchmark, TransportMoveTest)(benchmark::State &st) {
     });
   }
 }
+
+/**
+ * Benchmark proposal creation by moving another proposal
+ */
 BENCHMARK_DEFINE_F(ProposalBenchmark, MoveTest)(benchmark::State &st) {
   while (st.KeepRunning()) {
     auto proposal = complete_builder.build();
@@ -206,7 +210,12 @@ BENCHMARK_DEFINE_F(ProposalBenchmark, MoveTest)(benchmark::State &st) {
       shared_model::proto::Proposal copy(std::move(proposal.getTransport()));
       checkLoop(copy);
     });
+  }
+}
 
+/**
+ * Benchmark proposal creation by cloning another proposal
+ */
 BENCHMARK_DEFINE_F(ProposalBenchmark, CloneTest)(benchmark::State &st) {
   while (st.KeepRunning()) {
     auto proposal = complete_builder.build();
