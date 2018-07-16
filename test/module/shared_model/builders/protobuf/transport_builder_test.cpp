@@ -514,11 +514,12 @@ TEST_F(TransportBuilderTest, TransactionSequenceCorrect) {
   val | [](auto &seq) { ASSERT_EQ(boost::size(seq.value.transactions()), 24); };
 }
 /**
+ * Disabled: logic needs to be reviewed
  * @given batch of transaction with transaction in the middle
  * @when TransportBuilder tries to build TransactionSequence object
  * @then  built an error
  */
-TEST_F(TransportBuilderTest, TransactionInteraptedBatch) {
+TEST_F(TransportBuilderTest, DISABLED_CorruptedTransactionBatch) {
   std::vector<proto::Transaction> transactions;
   auto batch = getValidBatch(0, 10);
   std::move(std::begin(batch),
