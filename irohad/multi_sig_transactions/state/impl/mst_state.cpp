@@ -76,6 +76,11 @@ namespace iroha {
                                  internal_state_.end());
   }
 
+  std::vector<std::shared_ptr<shared_model::interface::TransactionBatch>>
+  MstState::getBatches() const {
+    return {};
+  }
+
   MstState MstState::eraseByTime(const TimeType &time) {
     MstState out = MstState::empty(completer_);
     while (not index_.empty() and (*completer_)(index_.top(), time)) {

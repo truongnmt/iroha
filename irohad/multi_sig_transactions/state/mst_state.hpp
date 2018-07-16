@@ -23,6 +23,8 @@
 #include <vector>
 #include "logger/logger.hpp"
 
+#include "interfaces/common_objects/transaction_sequence_common.hpp"
+#include "interfaces/iroha_internal/transaction_batch.hpp"
 #include "multi_sig_transactions/hash.hpp"
 #include "multi_sig_transactions/mst_types.hpp"
 
@@ -128,6 +130,9 @@ namespace iroha {
      * Provide transactions, that contains in state
      */
     std::vector<DataType> getTransactions() const;
+
+    std::vector<std::shared_ptr<shared_model::interface::TransactionBatch>>
+    getBatches() const;
 
     /**
      * Erase expired transactions
