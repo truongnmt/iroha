@@ -23,9 +23,6 @@ namespace shared_model {
      public:
       using NonCopyableProto::NonCopyableProto;
 
-      Proposal(const Proposal &o) = delete;
-      Proposal &operator=(const Proposal &o) = delete;
-
       Proposal(Proposal &&o) noexcept;
       Proposal &operator=(Proposal &&o) noexcept;
 
