@@ -55,6 +55,7 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
+    cmakeOptions = "-DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.5m.a -DPYTHON_INCLUDE_DIR=/usr/include/python3.5m/ -DPYTHON_EXECUTABLE=/usr/bin/python3.5"
     sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
   }
   if (env.PBVersion == "python2") { supportPython2 = "ON" }
@@ -83,6 +84,8 @@ def doPythonBindings(os, buildType=Release) {
   }  
   if (os == 'mac') {
     sh """
+      eval "\$(pyenv init -)"; \
+      pyenv shell 3.5.5; \
       protoc --proto_path=schema \
         --python_out=build/bindings \
         block.proto primitive.proto commands.proto queries.proto responses.proto endpoint.proto
@@ -107,11 +110,7 @@ def doPythonBindings(os, buildType=Release) {
         shared_model/schema/endpoint.proto
     """
   }
-  sh """
-    zip -j ${artifactsPath} build/bindings/*.py build/bindings/*.dll build/bindings/*.so \
-      build/bindings/*.py build/bindings/*.pyd build/bindings/*.lib build/bindings/*.dll \
-      build/bindings/*.exp build/bindings/*.manifest
-  """
+  sh " zip -j ${artifactsPath} build/bindings/*.{py,dll,so,pyd,lib,dll,exp,manifest} || true"
   if (os == 'windows' || os == 'mac') {
     sh "cp ${artifactsPath} /tmp/${commit}/bindings-artifact"
   }
@@ -156,39 +155,34 @@ def doPythonWheels(os, buildType) {
   if (os == 'linux') { envs = (env.PBVersion == "python2") ? "pip" : "pip3" }
   else if (os == 'mac') { envs = (env.PBVersion == "python2") ? "2.7.15" : "3.5.5" }
   else if (os == 'windows') { envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5" }
-  if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
-    version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
-    repo = "release"
-  }
-  else {
-    version = "develop"
-    repo = "develop"
-    if (params.nightly == true) {
-      version += "-nightly"
-      repo += "-nightly"
-    }
-    version +="-${env.GIT_COMMIT.substring(0,8)}"
-  }
+
+  version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
+  version += ".dev" + env.BUILD_NUMBER
+
+  repo = 'develop'
+  // if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
+  //   version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
+  //   repo = "release"
+  // }
+  // else {    
+  //   version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
+  //   version += "dev"
+  //   repo = "develop"
+  //   if (params.nightly == true) {
+  //     version += "-nightly"
+  //     repo += "-nightly"
+  //   }
+  //   version +="-${env.GIT_COMMIT.substring(0,8)}"
+  // }
   sh """
     mkdir -p wheels/iroha; \
-    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true;
+    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
     cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/;
+    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
+    sed -i.bak 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py; \
+    modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak 's/import \$m/from . import \$m/g' \$f; done; done;
   """
-  if (os == 'mac') {
-    sh "sed -i '' 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
-    sh """
-      modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
-      for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i '' 's/import \$m/from . import \$m/g' \$f; done; done;
-    """
-  }
-  else {
-    sh "sed -i 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py;"
-    sh """
-      modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//'));
-      for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i 's/import \$m/from . import \$m/g' \$f; done; done;
-    """
-  }
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"
   }
@@ -211,8 +205,9 @@ def doPythonWheels(os, buildType) {
     withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
       if (os == 'mac') {
         sh """
-          eval "\$(pyenv init -)"; \
-          twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl
+          eval "$(pyenv init -)" \;
+          pyenv shell ${envs}; \
+          bash -c "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
         """
       }
       else {

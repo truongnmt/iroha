@@ -7,7 +7,24 @@ About Nexus
 https://nexus.soramitsu.co.jp/ - our new PyPI, Maven, artifacts server with precompilled librares.
 You can download binaries without compilation on the client side. It helps to save you time and disk space for installing dependencies like libboost, libz, etc.
 
-Now our packages are distributed only for ``Windows x86_64`` and ``Linux x86_64`` with ``Python 2.7.x`` and ``Python 3.5.x``. In future it will be available on ``Mac OS``.
+Now our packages are distributed only for ``Linux x86_64``, ``MacOS x86_64`` and ``Windows x86_64`` with ``Python 2.7.x`` and ``Python 3.5.x``.
+
+Requirements
+
+.. code-block:: shell
+
+    protobuf >= 3.5.x
+    grpcio >= 1.12.x
+    python 2.7.x or 3.5.x
+
+
+Additional Linux requirements
+
+.. code-block:: shell
+
+    Ubuntu-based system (we build packages on Ubuntu 16.04 x86_64)
+    libboost 1.65
+
 
 https://nexus.soramitsu.co.jp/repository/pypi-develop/ - developer wheels (builds from ``develop`` branch)
 https://nexus.soramitsu.co.jp/repository/pypi-release/ - release wheels (builds from ``master`` branch)
@@ -23,21 +40,21 @@ From develop
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop/ iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop/simple iroha 
 
 
 From release
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-release/ iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-release/simple iroha 
 
 
 From develop-nightly
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/ iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/simple iroha 
 
 Pushing to PyPI
 ---------------
@@ -84,11 +101,11 @@ Then paste code below:
         iroha-develop-nightly
 
     [iroha-develop]
-    repository: https://nexus.soramitsu.co.jp/repository/pypi-develop/
+    repository: https://nexus.soramitsu.co.jp/repository/pypi-develop/simple
     [iroha-release]
-    repository: https://nexus.soramitsu.co.jp/repository/pypi-release/
+    repository: https://nexus.soramitsu.co.jp/repository/pypi-release/simple
     [iroha-develop-nightly]
-    repository: https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/
+    repository: https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/simple
 
 Save it and exit. Now you can download packages by this command:
 
