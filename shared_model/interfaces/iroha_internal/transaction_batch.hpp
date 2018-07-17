@@ -16,6 +16,8 @@ namespace shared_model {
     class TransactionBatch {
      public:
       TransactionBatch() = delete;
+      TransactionBatch(const TransactionBatch &) = default;
+      TransactionBatch(TransactionBatch &&) = default;
 
       /**
        * Create transaction batch out of collection of transactions
@@ -53,14 +55,14 @@ namespace shared_model {
        * Get transactions list
        * @return list of transactions from the batch
        */
-      const types::SharedTxsCollectionType& transactions() const;
+      const types::SharedTxsCollectionType &transactions() const;
 
       /**
        * Get the concatenation of reduced hashes as a single hash
        * @param reduced_hashes collection of reduced hashes
        * @return concatenated reduced hashes
        */
-      const types::HashType& reducedHash() const;
+      const types::HashType &reducedHash() const;
 
       /**
        * Get the concatenation of reduced hashes as a single hash

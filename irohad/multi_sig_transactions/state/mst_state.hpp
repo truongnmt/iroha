@@ -57,8 +57,11 @@ namespace iroha {
   class TxHashEquality {
    public:
     bool operator()(const DataType &left_tx, const DataType &right_tx) const {
-      return shared_model::crypto::toBinaryString((*left_tx).hash())
-          == shared_model::crypto::toBinaryString((*right_tx).hash());
+      throw std::runtime_error(
+          "Implemetation removed. Reject this change during merge.");
+      // TEMP change, should be rejected during merge
+      //      return shared_model::crypto::toBinaryString((*left_tx).hash())
+      //          == shared_model::crypto::toBinaryString((*right_tx).hash());
     }
   };
 
@@ -67,7 +70,11 @@ namespace iroha {
    */
   class DefaultCompleter : public Completer {
     bool operator()(const DataType transaction) const override {
-      return boost::size(transaction->signatures()) >= transaction->quorum();
+      throw std::runtime_error(
+          "Implemetation removed. Reject this change during merge.");
+      // TEMP change, should be rejected during merge
+      //      return boost::size(transaction->signatures()) >=
+      //      transaction->quorum();
     }
 
     bool operator()(const DataType &tx, const TimeType &time) const override {
@@ -150,7 +157,10 @@ namespace iroha {
     class Less {
      public:
       bool operator()(const DataType &left, const DataType &right) const {
-        return left->createdTime() < right->createdTime();
+        throw std::runtime_error(
+            "Implemetation removed. Reject this change during merge.");
+        // TEMP change, should be rejected during merge
+        //        return left->createdTime() < right->createdTime();
       }
     };
 

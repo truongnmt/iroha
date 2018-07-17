@@ -33,9 +33,12 @@ namespace iroha {
      public:
       using TxType = Tx;
       size_t operator()(const TxType &tx) const {
-        auto hash =
-            string_hasher(shared_model::crypto::toBinaryString(tx->hash()));
-        return hash;
+        throw std::runtime_error(
+            "Implemetation removed. Reject this change during merge.");
+        // TEMP change, should be rejected during merge
+        //        auto hash =
+        //            string_hasher(shared_model::crypto::toBinaryString(tx->hash()));
+        //        return hash;
       }
 
      private:

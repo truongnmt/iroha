@@ -51,20 +51,25 @@ namespace iroha {
   }
 
   bool MstState::operator==(const MstState &rhs) const {
-    return std::is_permutation(
-        internal_state_.begin(),
-        internal_state_.end(),
-        rhs.internal_state_.begin(),
-        [](auto tx1, auto tx2) {
-          if (*tx1 == *tx2) {
-            return std::is_permutation(
-                tx1->signatures().begin(),
-                tx1->signatures().end(),
-                tx2->signatures().begin(),
-                [](const auto &sig1, const auto &sig2) { return sig1 == sig2; });
-          }
-          return false;
-        });
+    throw std::runtime_error(
+        "Implemetation removed. Reject this change during merge.");
+    // TEMP change, should be rejected during merge
+    //    return std::is_permutation(internal_state_.begin(),
+    //                               internal_state_.end(),
+    //                               rhs.internal_state_.begin(),
+    //                               [](auto tx1, auto tx2) {
+    //                                 if (*tx1 == *tx2) {
+    //                                   return std::is_permutation(
+    //                                       tx1->signatures().begin(),
+    //                                       tx1->signatures().end(),
+    //                                       tx2->signatures().begin(),
+    //                                       [](const auto &sig1, const auto
+    //                                       &sig2) {
+    //                                         return sig1 == sig2;
+    //                                       });
+    //                                 }
+    //                                 return false;
+    //                               });
   }
 
   bool MstState::isEmpty() const {
@@ -107,27 +112,31 @@ namespace iroha {
   }
 
   void MstState::insertOne(MstState &out_state, const DataType &rhs_tx) {
-    auto corresponding = internal_state_.find(rhs_tx);
-    if (corresponding == internal_state_.end()) {
-      // when state not contains transaction
-      rawInsert(rhs_tx);
-      return;
-    }
-
-    auto &found = *corresponding;
-    // Append new signatures to the existing state
-    for (auto &sig : rhs_tx->signatures()) {
-      if (boost::find(found->signatures(), sig) == boost::end(found->signatures())) {
-        found->addSignature(sig.signedData(), sig.publicKey());
-      }
-    }
-
-    if ((*completer_)(found)) {
-      // state already has completed transaction,
-      // remove from state and return it
-      out_state += found;
-      internal_state_.erase(internal_state_.find(found));
-    }
+    throw std::runtime_error(
+        "Implemetation removed. Reject this change during merge.");
+    // TEMP change, should be rejected during merge
+    //    auto corresponding = internal_state_.find(rhs_tx);
+    //    if (corresponding == internal_state_.end()) {
+    //      // when state not contains transaction
+    //      rawInsert(rhs_tx);
+    //      return;
+    //    }
+    //
+    //    auto &found = *corresponding;
+    //    // Append new signatures to the existing state
+    //    for (auto &sig : rhs_tx->signatures()) {
+    //      if (boost::find(found->signatures(), sig) ==
+    //      boost::end(found->signatures())) {
+    //        found->addSignature(sig.signedData(), sig.publicKey());
+    //      }
+    //    }
+    //
+    //    if ((*completer_)(found)) {
+    //      // state already has completed transaction,
+    //      // remove from state and return it
+    //      out_state += found;
+    //      internal_state_.erase(internal_state_.find(found));
+    //    }
   }
 
   void MstState::rawInsert(const DataType &rhs_tx) {
