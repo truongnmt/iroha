@@ -23,7 +23,7 @@ Additional Linux requirements
 .. code-block:: shell
 
     Ubuntu-based system (we build packages on Ubuntu 16.04 x86_64)
-    libboost 1.65
+    libboost 1.66
 
 
 https://nexus.soramitsu.co.jp/repository/pypi-develop/ - developer wheels (builds from ``develop`` branch)

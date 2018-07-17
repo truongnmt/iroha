@@ -181,7 +181,7 @@ def doPythonWheels(os, buildType) {
     cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
     sed -i.bak 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py; \
     modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
-    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak 's/import \$m/from . import \$m/g' \$f; done; done;
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak "s/import \$m/from . import \$m/g" \$f; done; done;
   """
   if (os == 'linux') {
     sh "${envs} wheel --no-deps wheels/;"

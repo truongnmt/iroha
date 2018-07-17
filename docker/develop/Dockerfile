@@ -26,9 +26,7 @@ RUN set -e; \
         # CI dependencies
         git ssh tar gzip ca-certificates gnupg \
         # Pythons
-        python-pip python3-pip python3-setuptools python-dev \
-        # Python 3.5
-        python3.5-dev \
+        python-pip python-dev \
         # SWIG dependencies
         libpcre3-dev autoconf bison  \
         # other
@@ -260,8 +258,7 @@ RUN set -e; \
 
 # python bindings dependencies
 RUN set -e; \
-    pip install --upgrade pip setuptools wheel grpcio_tools twine; \
-    pip3 install --upgrade pip setuptools wheel grpcio_tools twine;
+    pip install --upgrade pip setuptools wheel twine virtualenv;
 
 # install lcov
 RUN set -e; \
@@ -284,4 +281,11 @@ RUN set -e; \
 
 
 USER iroha-ci
+
+RUN set -e; \
+    echo 'eval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > /home/iroha-ci/.bash_profile; \
+    pyenv virtualenv 3.5.5 3.5.5; \
+    pyenv virtualenv 2.7.15 2.7.15; \
+    pwd
+    
 CMD ["/bin/bash"]
