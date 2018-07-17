@@ -283,7 +283,10 @@ RUN set -e; \
 USER iroha-ci
 
 RUN set -e; \
-    echo 'eval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > /home/iroha-ci/.bash_profile; \
+    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
+#    echo 'eval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > /home/iroha-ci/.bash_profile; \
+    pyenv install 3.5.5; \
+    pyenv install 2.7.15; \
     pyenv virtualenv 3.5.5 3.5.5; \
     pyenv virtualenv 2.7.15 2.7.15; \
     pwd
