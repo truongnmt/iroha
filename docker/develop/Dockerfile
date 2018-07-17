@@ -28,7 +28,7 @@ RUN set -e; \
         # Pythons
         python-pip python3-pip python3-setuptools python-dev \
         # Python 3.5
-        python3.5-dev python3.5-pip\
+        python3.5-dev \
         # SWIG dependencies
         libpcre3-dev autoconf bison  \
         # other
