@@ -27,6 +27,8 @@ RUN set -e; \
         git ssh tar gzip ca-certificates gnupg \
         # Pythons
         python-pip python3-pip python3-setuptools python-dev \
+        # Python 3.5
+        python3.5-dev python3.5-pip\
         # SWIG dependencies
         libpcre3-dev autoconf bison  \
         # other
@@ -251,10 +253,10 @@ RUN set -e; \
     make install; \
     rm -rf /tmp/swig-rel-3.0.12
 
-RUN set -e; \
-    add-apt-repository -y ppa:jonathonf/python-3.6; \
-    apt-get update; \
-    apt-get -y install python3.6-dev
+# RUN set -e; \
+#     add-apt-repository -y ppa:jonathonf/python-3.6; \
+#     apt-get update; \
+#     apt-get -y install python3.6-dev
 
 # python bindings dependencies
 RUN set -e; \
