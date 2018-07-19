@@ -24,6 +24,7 @@
 namespace shared_model {
   namespace interface {
     class Transaction;
+    class TransactionBatch;
     class Proposal;
   }  // namespace interface
 }  // namespace shared_model
@@ -42,7 +43,15 @@ namespace iroha {
        */
       virtual void propagateTransaction(
           std::shared_ptr<const shared_model::interface::Transaction>
-              transaction) = 0;
+              transaction) const = 0;
+
+      /**
+       * Propagate a transaction batch for further processing
+       * @param batch
+       */
+      virtual void propagateBatch(
+          const shared_model::interface::TransactionBatch &batch)
+          const = 0;
 
       /**
        * Return observable of all proposals in the consensus

@@ -44,11 +44,16 @@ namespace iroha {
 
     void OrderingGateImpl::propagateTransaction(
         std::shared_ptr<const shared_model::interface::Transaction>
-            transaction) {
+            transaction) const {
       log_->info("propagate tx, account_id: {}",
                  " account_id: " + transaction->creatorAccountId());
 
       transport_->propagateTransaction(transaction);
+    }
+
+    void OrderingGateImpl::propagateBatch(
+        const shared_model::interface::TransactionBatch &batch) const {
+
     }
 
     rxcpp::observable<std::shared_ptr<shared_model::interface::Proposal>>
