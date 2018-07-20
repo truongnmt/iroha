@@ -82,9 +82,9 @@ def doDebugBuild(coverageEnabled=false) {
       """
       sh "cmake --build build -- -j${parallelism}"
       sh "ccache --show-stats"
-      if ( coverageEnabled ) {
-       sh "cmake --build build --target coverage.init.info"
-      }
+      // if ( coverageEnabled ) {
+      //  sh "cmake --build build --target coverage.init.info"
+      // }
       def testExitCode = sh(script: "cd build; ctest --output-on-failure --no-compress-output -T Test", returnStatus: true)
       if (testExitCode != 0) {
         currentBuild.result = "UNSTABLE"
@@ -93,25 +93,25 @@ def doDebugBuild(coverageEnabled=false) {
         failureThreshold: '50', unstableNewThreshold: '50', unstableThreshold: '20'), \
         skipped()], tools: [CTest(deleteOutputFiles: false, failIfNotNew: false, \
         pattern: 'build/Testing/**/Test.xml', skipNoTestFiles: false, stopProcessingIfError: true)]
-      if ( coverageEnabled ) {
-        sh "cmake --build build --target cppcheck"
-        // Sonar
-        if (env.CHANGE_ID != null) {
-          sh """
-            sonar-scanner \
-              -Dsonar.github.disableInlineComments \
-              -Dsonar.github.repository='${DOCKER_REGISTRY_BASENAME}' \
-              -Dsonar.analysis.mode=preview \
-              -Dsonar.login=${SONAR_TOKEN} \
-              -Dsonar.projectVersion=${BUILD_TAG} \
-              -Dsonar.github.oauth=${SORABOT_TOKEN} \
-              -Dsonar.github.pullRequest=${CHANGE_ID}
-          """
-        }
-        sh "cmake --build build --target coverage.info"
-        sh "python /tmp/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
-        cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
-      }
+      // if ( coverageEnabled ) {
+      //   sh "cmake --build build --target cppcheck"
+      //   // Sonar
+      //   if (env.CHANGE_ID != null) {
+      //     sh """
+      //       sonar-scanner \
+      //         -Dsonar.github.disableInlineComments \
+      //         -Dsonar.github.repository='${DOCKER_REGISTRY_BASENAME}' \
+      //         -Dsonar.analysis.mode=preview \
+      //         -Dsonar.login=${SONAR_TOKEN} \
+      //         -Dsonar.projectVersion=${BUILD_TAG} \
+      //         -Dsonar.github.oauth=${SORABOT_TOKEN} \
+      //         -Dsonar.github.pullRequest=${CHANGE_ID}
+      //     """
+      //   }
+      //   sh "cmake --build build --target coverage.info"
+      //   sh "python /tmp/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
+      //   cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
+      // }
     }
   }
 }

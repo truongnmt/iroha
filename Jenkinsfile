@@ -193,9 +193,9 @@ pipeline {
               """
               sh "cmake --build build -- -j${params.PARALLELISM}"
               sh "ccache --show-stats"
-              if ( coverageEnabled ) {
-                sh "cmake --build build --target coverage.init.info"
-              }
+              // if ( coverageEnabled ) {
+              //   sh "cmake --build build --target coverage.init.info"
+              // }
               sh """
                 export IROHA_POSTGRES_PASSWORD=${IROHA_POSTGRES_PASSWORD}; \
                 export IROHA_POSTGRES_USER=${IROHA_POSTGRES_USER}; \
@@ -204,28 +204,32 @@ pipeline {
                 pg_ctl -D /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/ -o '-p 5433' -l /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/events.log start; \
                 psql -h localhost -d postgres -p 5433 -U ${IROHA_POSTGRES_USER} --file=<(echo create database ${IROHA_POSTGRES_USER};)
               """
-              def testExitCode = sh(script: """cd build && IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 ctest --output-on-failure """, returnStatus: true)
+              def testExitCode = sh(script: "cd build; IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 ctest --output-on-failure --no-compress-output -T Test", returnStatus: true)
               if (testExitCode != 0) {
                 currentBuild.result = "UNSTABLE"
               }
-              if ( coverageEnabled ) {
-                sh "cmake --build build --target cppcheck"
-                // Sonar
-                if (env.CHANGE_ID != null) {
-                  sh """
-                    sonar-scanner \
-                      -Dsonar.github.disableInlineComments \
-                      -Dsonar.github.repository='hyperledger/iroha' \
-                      -Dsonar.analysis.mode=preview \
-                      -Dsonar.login=${SONAR_TOKEN} \
-                      -Dsonar.projectVersion=${BUILD_TAG} \
-                      -Dsonar.github.oauth=${SORABOT_TOKEN}
-                  """
-                }
-                sh "cmake --build build --target coverage.info"
-                sh "python /usr/local/bin/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
-                cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
-              }
+              xunit testTimeMargin: '3000', thresholdMode: 2, thresholds: [failed(failureNewThreshold: '90', \
+                failureThreshold: '50', unstableNewThreshold: '50', unstableThreshold: '20'), \
+                skipped()], tools: [CTest(deleteOutputFiles: false, failIfNotNew: false, \
+                pattern: 'build/Testing/**/Test.xml', skipNoTestFiles: false, stopProcessingIfError: true)]
+              // if ( coverageEnabled ) {
+              //   sh "cmake --build build --target cppcheck"
+              //   // Sonar
+              //   if (env.CHANGE_ID != null) {
+              //     sh """
+              //       sonar-scanner \
+              //         -Dsonar.github.disableInlineComments \
+              //         -Dsonar.github.repository='hyperledger/iroha' \
+              //         -Dsonar.analysis.mode=preview \
+              //         -Dsonar.login=${SONAR_TOKEN} \
+              //         -Dsonar.projectVersion=${BUILD_TAG} \
+              //         -Dsonar.github.oauth=${SORABOT_TOKEN}
+              //     """
+              //   }
+              //   sh "cmake --build build --target coverage.info"
+              //   sh "python /usr/local/bin/lcov_cobertura.py build/reports/coverage.info -o build/reports/coverage.xml"
+              //   cobertura autoUpdateHealth: false, autoUpdateStability: false, coberturaReportFile: '**/build/reports/coverage.xml', conditionalCoverageTargets: '75, 50, 0', failUnhealthy: false, failUnstable: false, lineCoverageTargets: '75, 50, 0', maxNumberOfBuilds: 50, methodCoverageTargets: '75, 50, 0', onlyStable: false, zoomCoverageChart: false
+              // }
               if (GIT_LOCAL_BRANCH ==~ /(master|develop)/) {
                 releaseBuild = load ".jenkinsci/mac-release-build.groovy"
                 releaseBuild.doReleaseBuild()
