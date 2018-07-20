@@ -211,7 +211,7 @@ if(jobs) {
   for(int i=0; i<jobs.size(); i++) {
     def job = jobs[i]
     tasks["${i}"] = {
-      job.each { it }
+      job.each { it() }
     }
   }
   stage('Build & Test') {
