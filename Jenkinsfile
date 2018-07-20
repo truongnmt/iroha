@@ -122,7 +122,7 @@ environment.each { it ->
 // TODO: coverage:class java.lang.String,
 // environment:class java.util.ArrayList,
 // dockerImage:class org.codehaus.groovy.runtime.GStringImpl
-def buildSteps(String label, String arch, String os, String buildType, coverage, environment, dockerImage) {
+def buildSteps(String label, String arch, String os, String buildType, Boolean coverage, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -142,7 +142,7 @@ def buildSteps(String label, String arch, String os, String buildType, coverage,
   }
 }
 
-def testSteps(String label, String arch, String os, Boolean coverage, Map environment, dockerImage) {
+def testSteps(String label, String arch, String os, Boolean coverage, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -182,8 +182,8 @@ if(params.iroha) {
           platformOS = platformOS.replaceAll('_', '-')
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
-        println("docker image is: ${dockerImage}")
-        jobs.add([buildSteps(agent, platformArch, platformOS, params.irohaBuildType, params.irohaCoverage, environmentList, dockerImage)])
+        jobs.add([buildSteps(agent, platformArch, platformOS, params.irohaBuildType,
+          params.irohaCoverage, environmentList, dockerImage)])
       }
     }
   }
@@ -201,7 +201,7 @@ if(params.iroha) {
             //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
           }
           job = testSteps(agent, platformArch, platformOS,
-                          irohaCoverage, environmentList, dockerImage)
+                          params.irohaCoverage, environmentList, dockerImage)
           jobs.collect { it.add(job) }
         }
       }
