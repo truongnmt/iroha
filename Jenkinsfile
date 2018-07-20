@@ -158,8 +158,7 @@ def testSteps(String label, String arch, String os, Boolean coverage, Map enviro
 def stubSteps(int a, int b) {
   return {
     node('master') {
-      def res = a + b
-      sh('echo "res: ${a+b}"')
+      println(a+b)
     }
   }
 }
