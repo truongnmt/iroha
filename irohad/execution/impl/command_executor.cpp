@@ -24,7 +24,6 @@
 #include "backend/protobuf/permissions.hpp"
 #include "execution/common_executor.hpp"
 #include "interfaces/commands/command.hpp"
-#include "utils/amount_utils.hpp"
 #include "validators/permissions.hpp"
 
 using namespace shared_model::detail;
@@ -749,16 +748,6 @@ namespace iroha {
       return makeCommandError(
           "is valid command validation failed: destination account with id "
               + command.destAccountId() + " does not exist",
-          command_name);
-    }
-    // Balance in your wallet should be at least amount of transfer
-    if (compareAmount(account_asset.value()->balance(), command.amount()) < 0) {
-      return makeCommandError(
-          "is valid command validation failed: not enough "
-          "balance on account "
-              + command.srcAccountId() + "; transfer amount "
-              + command.amount().toStringRepr() + ", balance "
-              + account_asset.value()->balance().toStringRepr(),
           command_name);
     }
     return {};
