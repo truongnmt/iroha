@@ -180,8 +180,8 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        //jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        jobs.add([stubSteps(5,6)])
+        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        //jobs.add([stubSteps(5,6)])
       }
     }
   }
