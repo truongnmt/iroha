@@ -83,12 +83,16 @@ def doDebugBuild(coverageEnabled=false) {
       sh "cmake --build build -- -j${parallelism}"
       sh "ccache --show-stats"
       if ( coverageEnabled ) {
-        sh "cmake --build build --target coverage.init.info"
+       sh "cmake --build build --target coverage.init.info"
       }
-      def testExitCode = sh(script: """cd build && ctest --output-on-failure""", returnStatus: true)
+      def testExitCode = sh(script: "cd build; ctest --output-on-failure --no-compress-output -T Test", returnStatus: true)
       if (testExitCode != 0) {
         currentBuild.result = "UNSTABLE"
       }
+      xunit testTimeMargin: '3000', thresholdMode: 2, thresholds: [failed(failureNewThreshold: '90', \
+        failureThreshold: '50', unstableNewThreshold: '50', unstableThreshold: '20'), \
+        skipped()], tools: [CTest(deleteOutputFiles: false, failIfNotNew: false, \
+        pattern: 'build/Testing/**/Test.xml', skipNoTestFiles: false, stopProcessingIfError: true)]
       if ( coverageEnabled ) {
         sh "cmake --build build --target cppcheck"
         // Sonar
