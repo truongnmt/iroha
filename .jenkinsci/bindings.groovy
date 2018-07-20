@@ -45,17 +45,17 @@ def doPythonBindings(os, buildType=Release) {
   def artifactsPath = sprintf('%1$s/python-bindings-%2$s-%3$s-%4$s-%5$s-%6$s.zip',
     [currentPath, env.PBVersion, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   def cmakeOptions = ""
+
+  sh "mkdir -p /tmp/${commit}/bindings-artifact"
   if (os == 'windows') {
-    sh "mkdir -p /tmp/${commit}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
   if (os == 'mac') {
-    sh "mkdir -p /tmp/${commit}/bindings-artifact"
     cmakeOptions = "-DPYTHON_INCLUDE_DIR=/Users/jenkins/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/jenkins/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/Users/jenkins/.pyenv/versions/3.5.5/bin/python3.5"
   }
   if (os == 'linux') {
-    // do not use preinstalled libed25519
-    cmakeOptions = "-DPYTHON_LIBRARY=/usr/lib/x86_64-linux-gnu/libpython3.5m.a -DPYTHON_INCLUDE_DIR=/usr/include/python3.5m/ -DPYTHON_EXECUTABLE=/usr/bin/python3.5"
+    cmakeOptions = "-DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5"
+    // do not use preinstalled libed25519   
     sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
   }
   if (env.PBVersion == "python2") { supportPython2 = "ON" }
@@ -94,14 +94,12 @@ def doPythonBindings(os, buildType=Release) {
         shared_model/schema/endpoint.proto
     """
   }
-  sh " zip -j ${artifactsPath} build/bindings/*.{py,dll,so,pyd,lib,dll,exp,manifest} || true"
-  if (os == 'windows' || os == 'mac') {
-    sh "cp ${artifactsPath} /tmp/${commit}/bindings-artifact"
-  }
-  else {
-    sh "cp ${artifactsPath} /tmp/bindings-artifact"
-  }
-  doPythonWheels(os, buildType);
+
+  sh """ 
+    zip -j ${artifactsPath} build/bindings/*.{py,dll,so,pyd,lib,dll,exp,manifest} || true; \
+    cp ${artifactsPath} /tmp/${commit}/bindings-artifact
+  """
+  
   return artifactsPath
 }
 
@@ -131,60 +129,3 @@ def doAndroidBindings(abiVersion) {
   sh "cp $artifactsPath /tmp/bindings-artifact"
   return artifactsPath
 }
-
-def doPythonWheels(os, buildType) {
-  def version;
-  def repo;
-  def envs
-  if (os == 'linux') { envs = (env.PBVersion == "python2") ? "pip" : "pip3" }
-  else if (os == 'mac') { envs = (env.PBVersion == "python2") ? "2.7.15" : "3.5.5" }
-  else if (os == 'windows') { envs = (env.PBVersion == "python2") ? "py2.7" : "py3.5" }
-
-  version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
-  version += ".dev" + env.BUILD_NUMBER
-
-  repo = 'develop'
-  // if (env.GIT_TAG_NAME != null || env.GIT_LOCAL_BRANCH == "master") {
-  //   version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
-  //   repo = "release"
-  // }
-  // else {    
-  //   version = sh(script: 'git describe --tags \$(git rev-list --tags --max-count=1)', returnStdout: true).trim()
-  //   version += "dev"
-  //   repo = "develop"
-  //   if (params.nightly == true) {
-  //     version += "-nightly"
-  //     repo += "-nightly"
-  //   }
-  //   version +="-${env.GIT_COMMIT.substring(0,8)}"
-  // }
-  sh """
-    mkdir -p wheels/iroha; \
-    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
-    sed -i.bak 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py; \
-    modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
-    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak "s/import \$m/from . import \$m/g" \$f; done; done;
-  """
-  if (os == 'mac' || os == 'linux') {
-    sh """
-      pyenv global ${envs}; \
-      pip wheel --no-deps wheels/; \
-      pyenv global 3.5.5; \
-    """
-  }
-  else if (os == 'windows') {
-    sh """
-      source activate ${envs}; \
-      pip wheel --no-deps wheels/; \
-      source deactivate;
-    """
-  }
-
-  if (env.PBBuildType == "Release")
-    withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-        sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
-    }
-}
-return this

@@ -25,8 +25,6 @@ RUN set -e; \
         libssl-dev zlib1g-dev libcurl4-openssl-dev libc6-dbg golang \
         # CI dependencies
         git ssh tar gzip ca-certificates gnupg \
-        # Pythons
-        python-pip python-dev \
         # SWIG dependencies
         libpcre3-dev autoconf bison  \
         # other
@@ -251,15 +249,6 @@ RUN set -e; \
     make install; \
     rm -rf /tmp/swig-rel-3.0.12
 
-# RUN set -e; \
-#     add-apt-repository -y ppa:jonathonf/python-3.6; \
-#     apt-get update; \
-#     apt-get -y install python3.6-dev
-
-# python bindings dependencies
-RUN set -e; \
-    pip install --upgrade pip setuptools wheel twine;
-
 # install lcov
 RUN set -e; \
     curl -L -o /tmp/lcov-1.13.tar.gz https://github.com/linux-test-project/lcov/releases/download/v1.13/lcov-1.13.tar.gz; cd /tmp; tar zxf lcov-1.13.tar.gz; cd lcov-1.13; make install
@@ -282,6 +271,7 @@ RUN set -e; \
 
 USER iroha-ci
 
+# install pyenv environment for python bindings
 RUN set -e; \
     curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
