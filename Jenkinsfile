@@ -119,7 +119,7 @@ environment.each { it ->
   environmentList.add("${it.key}=${it.value}")
 }
 
-def bSteps(String label, String arch, String os, String buildType, Boolean coverage, Map environment, dockerImage) {
+def buildSteps(String label, String arch, String os, String buildType, Boolean coverage, Map environment, String dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -155,7 +155,7 @@ def testSteps(String label, String arch, String os, Boolean coverage, Map enviro
   }
 }
 
-def stubSteps(int a, int b) {
+def stubSteps(int a, b) {
   return {
     node('master') {
       println(a+b)
@@ -180,8 +180,8 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        // jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        jobs.add([stubSteps(5,6)])
+        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        //jobs.add([stubSteps(5,6)])
       }
     }
   }
