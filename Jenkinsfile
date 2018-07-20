@@ -119,7 +119,10 @@ environment.each { it ->
   environmentList.add("${it.key}=${it.value}")
 }
 
-def buildSteps(String label, String arch, String os, String buildType, Boolean coverage, Map environment, String dockerImage) {
+// TODO: coverage:class java.lang.String,
+// environment:class java.util.ArrayList,
+// dockerImage:class org.codehaus.groovy.runtime.GStringImpl
+def buildSteps(String label, String arch, String os, String buildType, coverage, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -180,8 +183,7 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        //jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        jobs.add([stubSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
       }
     }
   }
@@ -218,15 +220,6 @@ if(jobs) {
     parallel tasks
   }
 }
-// tasks["qqq"] = {
-//   jobs[0][0]()
-// }
-// stage('build & test') {
-//   parallel tasks
-// }
-
-
-
 
 // build bindings
 // build docs
