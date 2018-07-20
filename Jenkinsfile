@@ -12,7 +12,7 @@ properties([
     booleanParam(defaultValue: true, name: 'debian_stretch'),
     booleanParam(defaultValue: false, name: 'macos'),
     booleanParam(defaultValue: false, name: 'windows'),
-    choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'IrohaBuildType'),
+    choice(choices: 'Debug\nRelease', description: 'Iroha build type', name: 'irohaBuildType'),
     booleanParam(defaultValue: false, description: 'Build Java bindings', name: 'JavaBindings'),
     choice(choices: 'Release\nDebug', description: 'Java bindings build type', name: 'JBBuildType'),
     string(defaultValue: 'jp.co.soramitsu.iroha', description: 'Java bindings package name', name: 'JBPackageName'),
@@ -183,7 +183,7 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        jobs.add([buildSteps(agent, platformArch, platformOS, params.irohaBuildType, params.irohaCoverage, environmentList, dockerImage)])
       }
     }
   }
