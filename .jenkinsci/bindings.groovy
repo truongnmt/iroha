@@ -72,27 +72,11 @@ def doPythonBindings(os, buildType=Release) {
   sh "cmake --build build --target irohapy -- ${parallelismParam}"
   sh "cmake --build build --target python_tests"
   sh "cd build; ctest -R python --output-on-failure"
-  if (os == 'linux') {
+  if (os == 'mac' || os == 'linux') {
     sh """
-      protoc --proto_path=shared_model/schema \
-        --python_out=build/bindings shared_model/schema/*.proto
-    """
-    sh """
-      ${env.PBVersion} -m grpc_tools.protoc --proto_path=shared_model/schema --python_out=build/bindings \
-        --grpc_python_out=build/bindings shared_model/schema/endpoint.proto
-    """
-  }  
-  if (os == 'mac') {
-    sh """
-      eval "\$(pyenv init -)"; \
-      pyenv shell 3.5.5; \
       protoc --proto_path=schema \
         --python_out=build/bindings \
         block.proto primitive.proto commands.proto queries.proto responses.proto endpoint.proto
-    """
-    sh """
-      eval "\$(pyenv init -)"; \
-      pyenv shell 3.5.5; \
       python -m grpc_tools.protoc --proto_path=schema --python_out=build/bindings \
         --grpc_python_out=build/bindings endpoint.proto yac.proto ordering.proto loader.proto
     """
@@ -183,14 +167,11 @@ def doPythonWheels(os, buildType) {
     modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
     for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak "s/import \$m/from . import \$m/g" \$f; done; done;
   """
-  if (os == 'linux') {
-    sh "${envs} wheel --no-deps wheels/;"
-  }
-  else if (os == 'mac') {
+  if (os == 'mac' || os == 'linux') {
     sh """
-      eval "\$(pyenv init -)"; \
-      pyenv shell ${envs}; \
+      pyenv global ${envs}; \
       pip wheel --no-deps wheels/; \
+      pyenv global 3.5.5; \
     """
   }
   else if (os == 'windows') {
@@ -203,16 +184,7 @@ def doPythonWheels(os, buildType) {
 
   if (env.PBBuildType == "Release")
     withCredentials([usernamePassword(credentialsId: 'ci_nexus', passwordVariable: 'CI_NEXUS_PASSWORD', usernameVariable: 'CI_NEXUS_USERNAME')]) {
-      if (os == 'mac') {
-        sh """
-          eval "\$(pyenv init -)"; \
-          pyenv shell ${envs}; \
-          bash -c "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
-        """
-      }
-      else {
         sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
-      }
     }
 }
 return this
