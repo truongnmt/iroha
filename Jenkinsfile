@@ -155,10 +155,10 @@ def testSteps(String label, String arch, String os, Boolean coverage, Map enviro
   }
 }
 
-def stubSteps(int a, b) {
+def stubSteps(String label, String arch, String os, String buildType, Boolean coverage, Map environment, String dockerImage) {
   return {
     node('master') {
-      println(a+b)
+      println(5+5)
     }
   }
 }
@@ -180,8 +180,8 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        //jobs.add([stubSteps(5,6)])
+        //jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        jobs.add([stubSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
       }
     }
   }
