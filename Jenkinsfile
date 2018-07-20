@@ -180,8 +180,8 @@ if(params.iroha) {
           dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
         }
         println("docker image is: ${dockerImage}")
-        jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        //jobs.add([stubSteps(5,6)])
+        // jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
+        jobs.add([stubSteps(5,6)])
       }
     }
   }
@@ -207,23 +207,23 @@ if(params.iroha) {
   }
 }
 
-// if(jobs) {
-//   for(int i=0; i<jobs.size(); i++) {
-//     def job = jobs[i]
-//     tasks["${i}"] = {
-//       job.each { it }
-//     }
-//   }
-//   stage('Build & Test') {
-//     parallel tasks
-//   }
+if(jobs) {
+  for(int i=0; i<jobs.size(); i++) {
+    def job = jobs[i]
+    tasks["${i}"] = {
+      job.each { it }
+    }
+  }
+  stage('Build & Test') {
+    parallel tasks
+  }
+}
+// tasks["qqq"] = {
+//   jobs[0][0]()
 // }
-tasks["qqq"] = {
-  jobs[0][0]()
-}
-stage('build & test') {
-  parallel tasks
-}
+// stage('build & test') {
+//   parallel tasks
+// }
 
 
 
