@@ -85,10 +85,11 @@ def doDebugBuild(coverageEnabled=false) {
       // if ( coverageEnabled ) {
       //  sh "cmake --build build --target coverage.init.info"
       // }
-      def testExitCode = sh(script: "cd build; ctest --output-on-failure --no-compress-output -T Test-linux", returnStatus: true)
+      def testExitCode = sh(script: "cd build; ctest --output-on-failure --no-compress-output -T Test", returnStatus: true)
       if (testExitCode != 0) {
         currentBuild.result = "UNSTABLE"
       }
+      sh("find build/Testing -name Test.xml -exec mv {} Test-linux.xml \\;")
       xunit testTimeMargin: '3000', thresholdMode: 2, thresholds: [failed(failureNewThreshold: '90', \
         failureThreshold: '50', unstableNewThreshold: '50', unstableThreshold: '20'), \
         skipped()], tools: [CTest(deleteOutputFiles: false, failIfNotNew: false, \

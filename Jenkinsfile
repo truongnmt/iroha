@@ -204,10 +204,11 @@ pipeline {
                 pg_ctl -D /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/ -o '-p 5433' -l /var/jenkins/${GIT_COMMIT}-${BUILD_NUMBER}/events.log start; \
                 psql -h localhost -d postgres -p 5433 -U ${IROHA_POSTGRES_USER} --file=<(echo create database ${IROHA_POSTGRES_USER};)
               """
-              def testExitCode = sh(script: "cd build; IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 ctest --output-on-failure --no-compress-output -T Test-mac", returnStatus: true)
+              def testExitCode = sh(script: "cd build; IROHA_POSTGRES_HOST=localhost IROHA_POSTGRES_PORT=5433 ctest --output-on-failure --no-compress-output -T Test", returnStatus: true)
               if (testExitCode != 0) {
                 currentBuild.result = "UNSTABLE"
               }
+              sh("find build/Testing -name Test.xml -exec mv {} Test-mac.xml \\;")
               xunit testTimeMargin: '3000', thresholdMode: 2, thresholds: [failed(failureNewThreshold: '90', \
                 failureThreshold: '50', unstableNewThreshold: '50', unstableThreshold: '20'), \
                 skipped()], tools: [CTest(deleteOutputFiles: false, failIfNotNew: false, \
