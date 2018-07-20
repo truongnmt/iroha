@@ -155,10 +155,10 @@ def testSteps(String label, String arch, String os, Boolean coverage, Map enviro
   }
 }
 
-def stubSteps(String label) {
+def stubSteps(label, arch, os, coverage, environment, dockerImage) {
   return {
-    node(label) {
-      println(5+5)
+    node('master') {
+      println("label:${label.getClass()}, arch:${arch.getClass()}, os:${os.getClass()}, coverage:${coverage.getClass()}, environment:${environment.getClass()}, dockerImage:${dockerImage.getClass()}")
     }
   }
 }
@@ -181,7 +181,7 @@ if(params.iroha) {
         }
         println("docker image is: ${dockerImage}")
         //jobs.add([buildSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
-        jobs.add([stubSteps('master')])
+        jobs.add([stubSteps(agent, platformArch, platformOS, params.IrohaBuildType, irohaCoverage, environmentList, dockerImage)])
       }
     }
   }
