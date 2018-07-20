@@ -19,13 +19,14 @@
 
 #include "ametsuchi/impl/postgres_wsv_command.hpp"
 #include "ametsuchi/impl/postgres_wsv_query.hpp"
-#include "amount/amount.hpp"
 
 namespace iroha {
   namespace ametsuchi {
-    TemporaryWsvImpl::TemporaryWsvImpl(std::unique_ptr<soci::session> sql)
+    TemporaryWsvImpl::TemporaryWsvImpl(std::unique_ptr<soci::session> sql,
+                                       std::shared_ptr<shared_model::interface::CommonObjectsFactory>
+                                       factory)
         : sql_(std::move(sql)),
-          wsv_(std::make_shared<PostgresWsvQuery>(*sql_)),
+          wsv_(std::make_shared<PostgresWsvQuery>(*sql_, factory)),
           executor_(std::make_shared<PostgresWsvCommand>(*sql_)),
           command_executor_(std::make_shared<CommandExecutor>(wsv_, executor_)),
           command_validator_(std::make_shared<CommandValidator>(wsv_)),
@@ -51,10 +52,10 @@ namespace iroha {
               };
       };
 
-      *sql_ << "SAVEPOINT savepoint_";
+      auto savepoint_wrapper = createSavepoint("savepoint_temp_wsv");
 
       return apply_function(tx, *wsv_) |
-                 [this,
+                 [savepoint = std::move(savepoint_wrapper),
                   &execute_command,
                   &tx]() -> expected::Result<void, validation::CommandError> {
         // check transaction's commands validity
@@ -73,19 +74,45 @@ namespace iroha {
                            return false;
                          });
           if (not cmd_is_valid) {
-            *sql_ << "ROLLBACK TO SAVEPOINT savepoint_";
             return expected::makeError(cmd_error);
           }
         }
         // success
-        *sql_ << "RELEASE SAVEPOINT savepoint_";
-
+        savepoint->release();
         return {};
       };
+    }
+
+    std::unique_ptr<TemporaryWsv::SavepointWrapper>
+    TemporaryWsvImpl::createSavepoint(const std::string &name) {
+      return std::make_unique<TemporaryWsvImpl::SavepointWrapperImpl>(
+          SavepointWrapperImpl(*this, name));
     }
 
     TemporaryWsvImpl::~TemporaryWsvImpl() {
       *sql_ << "ROLLBACK";
     }
+
+    TemporaryWsvImpl::SavepointWrapperImpl::SavepointWrapperImpl(
+        const iroha::ametsuchi::TemporaryWsvImpl &wsv,
+        std::string savepoint_name)
+        : sql_{wsv.sql_},
+          savepoint_name_{std::move(savepoint_name)},
+          is_released_{false} {
+      *sql_ << "SAVEPOINT " + savepoint_name_ + ";";
+    };
+
+    void TemporaryWsvImpl::SavepointWrapperImpl::release() {
+      is_released_ = true;
+    }
+
+    TemporaryWsvImpl::SavepointWrapperImpl::~SavepointWrapperImpl() {
+      if (not is_released_) {
+        *sql_ << "ROLLBACK TO SAVEPOINT " + savepoint_name_ + ";";
+      } else {
+        *sql_ << "RELEASE SAVEPOINT " + savepoint_name_ + ";";
+      }
+    }
+
   }  // namespace ametsuchi
 }  // namespace iroha

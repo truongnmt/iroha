@@ -17,8 +17,16 @@
 
 #include "ametsuchi/impl/postgres_wsv_command.hpp"
 
+#include <numeric>
+
 #include <boost/format.hpp>
+
 #include "backend/protobuf/permissions.hpp"
+#include "interfaces/common_objects/account.hpp"
+#include "interfaces/common_objects/account_asset.hpp"
+#include "interfaces/common_objects/asset.hpp"
+#include "interfaces/common_objects/domain.hpp"
+#include "interfaces/common_objects/peer.hpp"
 
 namespace iroha {
   namespace ametsuchi {
@@ -204,12 +212,13 @@ namespace iroha {
 
     WsvCommandResult PostgresWsvCommand::insertAsset(
         const shared_model::interface::Asset &asset) {
+      auto precision = asset.precision();
       soci::statement st = sql_.prepare
           << "INSERT INTO asset(asset_id, domain_id, \"precision\", data) "
              "VALUES (:id, :domain_id, :precision, NULL)";
       st.exchange(soci::use(asset.assetId()));
       st.exchange(soci::use(asset.domainId()));
-      st.exchange(soci::use(asset.precision()));
+      st.exchange(soci::use(precision));
 
       auto msg = [&] {
         return (boost::format("failed to insert asset, asset id: '%s', "
