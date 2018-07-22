@@ -275,10 +275,14 @@ USER iroha-ci
 RUN set -e; \
     curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
-    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc; \
+    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc;
+
+RUN set -e; \
     source ~/.bash_profile; \
     pyenv install 3.5.5; \
-    pyenv install 2.7.15; \
+    pyenv install 2.7.15;
+
+RUN set -e; \
     pyenv global 2.7.15; \
     pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
     pyenv global 3.5.5; \
