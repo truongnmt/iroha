@@ -277,8 +277,7 @@ RUN set -e; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc;
 
-RUN set -e; \
-    bash -c "source ~/.bash_profile";
+RUN . ~/.bash_profile
 
 RUN set -e; \
     pyenv install 3.5.5;
