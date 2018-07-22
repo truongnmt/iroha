@@ -37,19 +37,15 @@ RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
 WORKDIR /home/iroha-ci
 USER iroha-ci
 
-ENV PYENV_ROOT=/home/iroha-ci/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+RUN git clone git://github.com/yyuu/pyenv.git .pyenv
 
-# install pyenv environment for python bindings
-RUN set -e; \
-    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
-    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
-    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc; \
-    pyenv install 3.5.5; \
-    pyenv install 2.7.15; \
-    pyenv global 2.7.15; \
-    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
-    pyenv global 3.5.5; \
-    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf;
+ENV HOME /home/iroha-ci
+ENV PYENV_ROOT $HOME/.pyenv
+ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+
+RUN pyenv install 2.7.15
+RUN pyenv global 2.7.15
+RUN pyenv rehash
 
 # install cmake 3.10.2
 RUN set -e; \
