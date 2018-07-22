@@ -33,8 +33,8 @@ RUN set -e; \
     apt-get -y clean
 
 
+RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
 USER iroha-ci
-
 
 ENV HOME=/home/iroha-ci PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
 
@@ -49,7 +49,7 @@ RUN set -e; \
     pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
     pyenv global 3.5.5; \
     pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf;
-    
+
 # install cmake 3.10.2
 RUN set -e; \
     git clone https://gitlab.kitware.com/cmake/cmake.git /tmp/cmake; \
@@ -278,7 +278,6 @@ RUN set -e; \
 #   -u = userid, default for Ubuntu is 1000
 #   -U = create a group same as username
 #   no password
-RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
 
 WORKDIR /opt/iroha
 RUN set -e; \
