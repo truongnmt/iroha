@@ -33,6 +33,13 @@ RUN set -e; \
     apt-get -y clean
 
 
+# non-interactive adduser
+#   -m = create home dir
+#   -s = set default shell
+#   iroha-ci = username
+#   -u = userid, default for Ubuntu is 1000
+#   -U = create a group same as username
+#   no password
 RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
 
 # install pyenv environment for python bindings
@@ -276,15 +283,6 @@ RUN set -e; \
 # install lcov
 RUN set -e; \
     curl -L -o /tmp/lcov-1.13.tar.gz https://github.com/linux-test-project/lcov/releases/download/v1.13/lcov-1.13.tar.gz; cd /tmp; tar zxf lcov-1.13.tar.gz; cd lcov-1.13; make install
-
-# non-interactive adduser
-#   -m = create home dir
-#   -s = set default shell
-#   iroha-ci = username
-#   -u = userid, default for Ubuntu is 1000
-#   -U = create a group same as username
-#   no password
-
 
 WORKDIR /opt/iroha
 RUN set -e; \
