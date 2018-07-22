@@ -277,15 +277,10 @@ RUN set -e; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc;
 
-RUN . ~/.bash_profile
-
 RUN set -e; \
-    pyenv install 3.5.5;
-
-RUN set -e; \
-    pyenv install 2.7.15;
-
-RUN set -e; \
+    /bin/bash -c "source ~/.bash_profile"; \
+    pyenv install 3.5.5; \
+    pyenv install 2.7.15; \
     pyenv global 2.7.15; \
     pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
     pyenv global 3.5.5; \
