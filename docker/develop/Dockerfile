@@ -36,7 +36,7 @@ RUN set -e; \
 RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
 USER iroha-ci
 
-ENV HOME=/home/iroha-ci PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+ENV PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
 
 # install pyenv environment for python bindings
 RUN set -e; \
