@@ -34,6 +34,7 @@ RUN set -e; \
 
 
 RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
+WORKDIR /home/iroha-ci
 USER iroha-ci
 
 ENV PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
