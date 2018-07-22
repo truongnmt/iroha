@@ -32,21 +32,6 @@ RUN set -e; \
         gcovr cppcheck doxygen graphviz graphviz-dev unzip zip; \
     apt-get -y clean
 
-
-RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
-WORKDIR /home/iroha-ci
-USER iroha-ci
-
-RUN git clone git://github.com/yyuu/pyenv.git .pyenv
-
-ENV HOME /home/iroha-ci
-ENV PYENV_ROOT $HOME/.pyenv
-ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
-
-RUN pyenv install 2.7.15
-RUN pyenv global 2.7.15
-RUN pyenv rehash
-
 # install cmake 3.10.2
 RUN set -e; \
     git clone https://gitlab.kitware.com/cmake/cmake.git /tmp/cmake; \
@@ -276,12 +261,27 @@ RUN set -e; \
 #   -U = create a group same as username
 #   no password
 
+
+RUN useradd -ms /bin/bash iroha-ci -u 1000 -U
+
 WORKDIR /opt/iroha
 RUN set -e; \
     chmod -R 777 /opt/iroha; \
     mkdir -p /tmp/ccache -m 777; \
     ccache --clear
 
+USER iroha-ci
+ 
+RUN git clone git://github.com/yyuu/pyenv.git $HOME/.pyenv
+ENV PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
 
-    
+# install pyenv environment for python bindings
+RUN set -e; \
+    pyenv install 3.5.5; \
+    pyenv install 2.7.15; \
+    pyenv global 2.7.15; \
+    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
+    pyenv global 3.5.5; \
+    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf;
+
 CMD ["/bin/bash"]
