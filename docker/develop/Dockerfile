@@ -271,11 +271,15 @@ RUN set -e; \
     ccache --clear
 
 USER iroha-ci
- 
-RUN git clone git://github.com/yyuu/pyenv.git $HOME/.pyenv
-ENV PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
 
 # install pyenv environment for python bindings
+
+RUN git clone git://github.com/yyuu/pyenv.git .pyenv
+
+ENV HOME /home/iroha-ci
+ENV PYENV_ROOT $HOME/.pyenv
+ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+
 RUN set -e; \
     pyenv install 3.5.5; \
     pyenv install 2.7.15; \
