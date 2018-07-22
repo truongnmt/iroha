@@ -278,8 +278,12 @@ RUN set -e; \
     echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc;
 
 RUN set -e; \
-    source ~/.bash_profile; \
-    pyenv install 3.5.5; \
+    source ~/.bash_profile;
+
+RUN set -e; \
+    pyenv install 3.5.5;
+    
+RUN set -e; \
     pyenv install 2.7.15;
 
 RUN set -e; \
