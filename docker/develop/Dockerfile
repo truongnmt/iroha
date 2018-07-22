@@ -32,6 +32,24 @@ RUN set -e; \
         gcovr cppcheck doxygen graphviz graphviz-dev unzip zip; \
     apt-get -y clean
 
+
+USER iroha-ci
+
+
+ENV HOME=/home/iroha-ci PYENV_ROOT=$HOME/.pyenv PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+
+# install pyenv environment for python bindings
+RUN set -e; \
+    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
+    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
+    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc; \
+    pyenv install 3.5.5; \
+    pyenv install 2.7.15; \
+    pyenv global 2.7.15; \
+    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
+    pyenv global 3.5.5; \
+    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf;
+    
 # install cmake 3.10.2
 RUN set -e; \
     git clone https://gitlab.kitware.com/cmake/cmake.git /tmp/cmake; \
@@ -269,21 +287,5 @@ RUN set -e; \
     ccache --clear
 
 
-USER iroha-ci
-
-# install pyenv environment for python bindings
-RUN set -e; \
-    curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash; \
-    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bash_profile; \
-    echo -e 'export PATH="$HOME/.pyenv/bin:$PATH"\neval "$(pyenv init -)"\neval "$(pyenv virtualenv-init -)"' > $HOME/.bashrc;
-
-RUN set -e; \
-    /bin/bash -c "source ~/.bash_profile"; \
-    pyenv install 3.5.5; \
-    pyenv install 2.7.15; \
-    pyenv global 2.7.15; \
-    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
-    pyenv global 3.5.5; \
-    pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf;
     
 CMD ["/bin/bash"]
