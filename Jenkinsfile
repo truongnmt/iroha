@@ -186,7 +186,7 @@ node('master') {
           }
           if(params.PythonBindings) {
             println('Running python')
-            jobs.add([bindings.buildSteps(agent, platformArch, platformOS, params.PBBuildType,
+            jobs.add([bindings.pythonBuildSteps(agent, platformArch, platformOS, params.PBBuildType,
               environmentList, dockerImage)])
           }
         }
