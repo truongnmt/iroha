@@ -180,9 +180,14 @@ node('master') {
             platformOS = 'linux'
           }
           if(params.JavaBindings) {
-            println('Running bindings 2')
-            jobs.add([bindings.buildSteps(agent, platformArch, platformOS, params.JBBuildType,
-              params.JBPackageName, 'java', environmentList, dockerImage)])
+            println('Running java')
+            jobs.add([bindings.javaBuildSteps(agent, platformArch, platformOS, params.JBBuildType,
+              params.JBPackageName, environmentList, dockerImage)])
+          }
+          if(params.PythonBindings) {
+            println('Running python')
+            jobs.add([bindings.buildSteps(agent, platformArch, platformOS, params.PBBuildType,
+              environmentList, dockerImage)])
           }
         }
       }

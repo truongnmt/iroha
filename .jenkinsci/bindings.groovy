@@ -128,7 +128,7 @@ def pythonBindings(buildType, os, scmVars) {
 //   return artifactsPath
 // }
 
-def buildSteps(String label, String arch, String os, String buildType, String packageName, String lang, environment, dockerImage) {
+def javaBuildSteps(String label, String arch, String os, String buildType, String packageName, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -140,25 +140,39 @@ def buildSteps(String label, String arch, String os, String buildType, String pa
         dir(workspace) {
           // then checkout into actual workspace
           checkout scm
-          if(lang == 'java') {
-            if(dockerImage) {
-              docker.image(dockerImage).inside {
-                javaBindings(buildType, os, packageName, scmVars)
-              }
-            }
-            else {
+          if(dockerImage) {
+            docker.image(dockerImage).inside {
               javaBindings(buildType, os, packageName, scmVars)
             }
           }
-          if(lang == 'python') {
-            if(dockerImage) {
-              docker.image(dockerImage).inside {
-                pythonBindings(buildType, os, packageName, scmVars)
-              }
+          else {
+            javaBindings(buildType, os, packageName, scmVars)
+          }
+        }
+      }
+    }
+  }
+}
+
+def pythonBuildSteps(String label, String arch, String os, String buildType, environment, dockerImage) {
+  return {
+    node(label) {
+      withEnv(environment) {
+        // checkout to expose env vars
+        def scmVars = checkout scm
+        //def workspace = "/var/jenkins/workspace/4c4825402c5cc2d4cb3217a9b62fe444499b2ca0-189-arm64-debian-stretch"
+        def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
+        sh("mkdir -p $workspace")
+        dir(workspace) {
+          // then checkout into actual workspace
+          checkout scm
+          if(dockerImage) {
+            docker.image(dockerImage).inside {
+              pythonBindings(buildType, os, scmVars)
             }
-            else {
-              pythonBindings(buildType, os, packageName, scmVars)
-            }
+          }
+          else {
+            pythonBindings(buildType, os, scmVars)
           }
         }
       }
