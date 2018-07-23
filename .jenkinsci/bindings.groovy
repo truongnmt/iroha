@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-def doJavaBindings(os, packageName, buildType=Release) {
+def javaBindings(buildType, os, packageName) {
   def currentPath = sh(script: "pwd", returnStdout: true).trim()
   def commit = env.GIT_COMMIT
   def artifactsPath = sprintf('%1$s/java-bindings-%2$s-%3$s-%4$s-%5$s.zip',
@@ -12,7 +12,7 @@ def doJavaBindings(os, packageName, buildType=Release) {
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
-    sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
+    sh "rm -rf \$STAGING/include/ed25519*; unlink \$STAGING/lib/libed25519.so; rm -f \$STAGING/lib/libed25519.so.*"
   }
   sh """
     cmake \
@@ -32,13 +32,10 @@ def doJavaBindings(os, packageName, buildType=Release) {
   if (os == 'windows') {
     sh "cp $artifactsPath /tmp/${env.GIT_COMMIT}/bindings-artifact"
   }
-  else {
-    sh "cp $artifactsPath /tmp/bindings-artifact"
-  }
   return artifactsPath
 }
 
-def doPythonBindings(os, buildType=Release) {
+def pythonBindings(os, buildType=Release) {
   def currentPath = sh(script: "pwd", returnStdout: true).trim()
   def commit = env.GIT_COMMIT
   def supportPython2 = "OFF"
@@ -106,31 +103,57 @@ def doPythonBindings(os, buildType=Release) {
   return artifactsPath
 }
 
-def doAndroidBindings(abiVersion) {
-  def currentPath = sh(script: "pwd", returnStdout: true).trim()
-  def commit = env.GIT_COMMIT
-  def artifactsPath = sprintf('%1$s/android-bindings-%2$s-%3$s-%4$s-%5$s-%6$s.zip',
-    [currentPath, "\$PLATFORM", abiVersion, "\$BUILD_TYPE_A", sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
-  sh """
-    (cd /iroha; git init; git remote add origin https://github.com/hyperledger/iroha.git; \
-    git fetch origin ${GIT_COMMIT}; git checkout FETCH_HEAD)
-  """
-  sh """
-    . /entrypoint.sh; \
-    sed -i.bak "s~find_package(JNI REQUIRED)~SET(CMAKE_SWIG_FLAGS \\\${CMAKE_SWIG_FLAGS} -package \${PACKAGE})~" /iroha/shared_model/bindings/CMakeLists.txt; \
-    # TODO: might not be needed in the future
-    sed -i.bak "/target_include_directories(\\\${SWIG_MODULE_irohajava_REAL_NAME} PUBLIC/,+3d" /iroha/shared_model/bindings/CMakeLists.txt; \
-    sed -i.bak "s~swig_link_libraries(irohajava~swig_link_libraries(irohajava \"/protobuf/.build/lib\${PROTOBUF_LIB_NAME}.a\" \"\${NDK_PATH}/platforms/android-$abiVersion/\${ARCH}/usr/\${LIBP}/liblog.so\"~" /iroha/shared_model/bindings/CMakeLists.txt; \
-    sed -i.bak "s~find_library(protobuf_LIBRARY protobuf)~find_library(protobuf_LIBRARY \${PROTOBUF_LIB_NAME})~" /iroha/cmake/Modules/Findprotobuf.cmake; \
-    sed -i.bak "s~find_program(protoc_EXECUTABLE protoc~set(protoc_EXECUTABLE \"/protobuf/host_build/protoc\"~" /iroha/cmake/Modules/Findprotobuf.cmake; \
-    cmake -H/iroha/shared_model -B/iroha/shared_model/build -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_VERSION=$abiVersion -DCMAKE_ANDROID_ARCH_ABI=\$PLATFORM \
-      -DANDROID_NDK=\$NDK_PATH -DCMAKE_ANDROID_STL_TYPE=c++_static -DCMAKE_BUILD_TYPE=\$BUILD_TYPE_A -DTESTING=OFF \
-      -DSWIG_JAVA=ON -DCMAKE_PREFIX_PATH=\$DEPS_DIR
-    """
-  sh "cmake --build /iroha/shared_model/build --target irohajava -- -j${params.PARALLELISM}"
-  sh "zip -j $artifactsPath /iroha/shared_model/build/bindings/*.java /iroha/shared_model/build/bindings/libirohajava.so"
-  sh "cp $artifactsPath /tmp/bindings-artifact"
-  return artifactsPath
+// def androidBindings(abiVersion) {
+//   def currentPath = sh(script: "pwd", returnStdout: true).trim()
+//   def commit = env.GIT_COMMIT
+//   def artifactsPath = sprintf('%1$s/android-bindings-%2$s-%3$s-%4$s-%5$s-%6$s.zip',
+//     [currentPath, "\$PLATFORM", abiVersion, "\$BUILD_TYPE_A", sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
+//   sh """
+//     (cd /iroha; git init; git remote add origin https://github.com/hyperledger/iroha.git; \
+//     git fetch origin ${GIT_COMMIT}; git checkout FETCH_HEAD)
+//   """
+//   sh """
+//     . /entrypoint.sh; \
+//     sed -i.bak "s~find_package(JNI REQUIRED)~SET(CMAKE_SWIG_FLAGS \\\${CMAKE_SWIG_FLAGS} -package \${PACKAGE})~" /iroha/shared_model/bindings/CMakeLists.txt; \
+//     # TODO: might not be needed in the future
+//     sed -i.bak "/target_include_directories(\\\${SWIG_MODULE_irohajava_REAL_NAME} PUBLIC/,+3d" /iroha/shared_model/bindings/CMakeLists.txt; \
+//     sed -i.bak "s~swig_link_libraries(irohajava~swig_link_libraries(irohajava \"/protobuf/.build/lib\${PROTOBUF_LIB_NAME}.a\" \"\${NDK_PATH}/platforms/android-$abiVersion/\${ARCH}/usr/\${LIBP}/liblog.so\"~" /iroha/shared_model/bindings/CMakeLists.txt; \
+//     sed -i.bak "s~find_library(protobuf_LIBRARY protobuf)~find_library(protobuf_LIBRARY \${PROTOBUF_LIB_NAME})~" /iroha/cmake/Modules/Findprotobuf.cmake; \
+//     sed -i.bak "s~find_program(protoc_EXECUTABLE protoc~set(protoc_EXECUTABLE \"/protobuf/host_build/protoc\"~" /iroha/cmake/Modules/Findprotobuf.cmake; \
+//     cmake -H/iroha/shared_model -B/iroha/shared_model/build -DCMAKE_SYSTEM_NAME=Android -DCMAKE_SYSTEM_VERSION=$abiVersion -DCMAKE_ANDROID_ARCH_ABI=\$PLATFORM \
+//       -DANDROID_NDK=\$NDK_PATH -DCMAKE_ANDROID_STL_TYPE=c++_static -DCMAKE_BUILD_TYPE=\$BUILD_TYPE_A -DTESTING=OFF \
+//       -DSWIG_JAVA=ON -DCMAKE_PREFIX_PATH=\$DEPS_DIR
+//     """
+//   sh "cmake --build /iroha/shared_model/build --target irohajava -- -j${params.PARALLELISM}"
+//   sh "zip -j $artifactsPath /iroha/shared_model/build/bindings/*.java /iroha/shared_model/build/bindings/libirohajava.so"
+//   sh "cp $artifactsPath /tmp/bindings-artifact"
+//   return artifactsPath
+// }
+
+def buildSteps(String label, String arch, String os, String buildType, String packageName, environment, dockerImage) {
+  return {
+    node(label) {
+      withEnv(environment) {
+        // checkout to expose env vars
+        def scmVars = checkout scm
+        //def workspace = "/var/jenkins/workspace/4c4825402c5cc2d4cb3217a9b62fe444499b2ca0-189-arm64-debian-stretch"
+        def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
+        sh("mkdir -p $workspace")
+        dir(workspace) {
+          // then checkout into actual workspace
+          checkout scm
+          if(dockerImage) {
+            docker.image(dockerImage).inside {
+              javaBindings(buildType, os, packageName)
+            }
+          }
+          else {
+            javaBindings(buildType, os, packageName)
+          }
+        }
+      }
+    }
+  }
 }
 
 return this
