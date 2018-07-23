@@ -68,7 +68,7 @@ def agentsMap =
       ['arm64', 'ubuntu_xenial'],
       ['arm64', 'ubuntu_bionic'],
       ['arm64', 'debian_stretch']],
-    (agentLabels['arm64-agent']):
+    (agentLabels['armhf-agent']):
     [
       ['armhf', 'ubuntu_xenial'],
       ['armhf', 'ubuntu_bionic'],
@@ -189,6 +189,7 @@ if(params.iroha) {
   // run tests if required
   if(params.irohaTests) {
     testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
+    println("testers is: ${testers}")
     testers.each { agent, platform ->
       for(t in platform) {
         println("Platform size is: ${t.size()}")
