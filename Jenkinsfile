@@ -116,8 +116,8 @@ node('master') {
     "GIT_RAW_BASE_URL": "https://raw.githubusercontent.com/hyperledger/iroha",
     "DOCKER_REGISTRY_CREDENTIALS_ID": 'docker-hub-credentials'
   ]
-  environment.each { it ->
-    environmentList.add("${it.key}=${it.value}")
+  environment.each { e ->
+    environmentList.add("${e.key}=${e.value}")
   }
   // build Iroha binaries
   if(params.iroha) {
