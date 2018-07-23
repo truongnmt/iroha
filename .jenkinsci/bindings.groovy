@@ -10,10 +10,11 @@ def javaBindings(buildType, os, packageName, scmVars) {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
-  if (os == 'linux') {
-    // do not use preinstalled libed25519
-    sh "rm -rf \$STAGING/include/ed25519*; unlink \$STAGING/lib/libed25519.so; rm -f \$STAGING/lib/libed25519.so.*"
-  }
+  // TODO: cannot remove as we're ubuntu user w/o sudo
+  // if (os == 'linux') {
+  //   // do not use preinstalled libed25519
+  //   sh "rm -rf \$STAGING/include/ed25519*; unlink \$STAGING/lib/libed25519.so; rm -f \$STAGING/lib/libed25519.so.*"
+  // }
   sh """
     cmake \
       -Hshared_model \
