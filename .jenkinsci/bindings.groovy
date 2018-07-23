@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-def javaBindings(buildType, os, packageName) {
+def javaBindings(buildType, os, packageName, scmVars) {
   def currentPath = sh(script: "pwd", returnStdout: true).trim()
   def commit = scmVars.GIT_COMMIT
   def artifactsPath = sprintf('%1$s/java-bindings-%2$s-%3$s-%4$s-%5$s.zip',
@@ -145,11 +145,11 @@ def buildSteps(String label, String arch, String os, String buildType, String pa
           if(lang == 'java') {
             if(dockerImage) {
               docker.image(dockerImage).inside {
-                javaBindings(buildType, os, packageName)
+                javaBindings(buildType, os, packageName, scmVars)
               }
             }
             else {
-              javaBindings(buildType, os, packageName)
+              javaBindings(buildType, os, packageName, scmVars)
             }
           }
         }
