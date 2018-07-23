@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 
-def doPythonWheels(os, buildType) {
+def doPythonWheels(os, buildType=Release) {
   def version;
   def repo;
   def envs
@@ -51,4 +51,5 @@ def doPythonWheels(os, buildType) {
         sh "twine upload --skip-existing -u ${CI_NEXUS_USERNAME} -p ${CI_NEXUS_PASSWORD} --repository-url https://nexus.soramitsu.co.jp/repository/pypi-${repo}/ *.whl"
     }
 }
+
 return this

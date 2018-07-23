@@ -469,6 +469,8 @@ pipeline {
                 if (params.PythonBindings) {
                   iC.inside("-v /tmp/${env.GIT_COMMIT}/bindings-artifact:/tmp/${env.GIT_COMMIT}/bindings-artifact") {
                     bindings.doPythonBindings('linux', params.PBBuildType)
+                    def wheels = load ".jenkins/python-wheels.groovy"
+                    wheels.doPythonWheels('linux', params.PBBuildType)
                   }
                 }
               }
@@ -525,6 +527,8 @@ pipeline {
               }
               if (params.PythonBindings) {
                 bindings.doPythonBindings('mac', params.PBBuildType)
+                def wheels = load ".jenkins/python-wheels.groovy"
+                wheels.doPythonWheels('mac', params.PBBuildType)
               }
             }
           }
@@ -562,6 +566,8 @@ pipeline {
               }
               if (params.PythonBindings) {
                 bindings.doPythonBindings('windows', params.PBBuildType)
+                def wheels = load ".jenkins/python-wheels.groovy"
+                wheels.doPythonWheels('windows', params.PBBuildType)
               }
             }
           }
