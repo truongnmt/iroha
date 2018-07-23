@@ -103,7 +103,7 @@ def userInputArchOsTuples() {
 
 node('master') {
   def scmVars = checkout scm
-  def iroha = load "./jenkinsci/iroha.groovy"
+  def iroha = load ".jenkinsci/iroha.groovy"
   environment = [
     "CCACHE_DIR": "/opt/.ccache",
     "DOCKER_REGISTRY_BASENAME": "hyperledger/iroha",
