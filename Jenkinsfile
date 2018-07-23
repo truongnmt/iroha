@@ -191,6 +191,7 @@ if(params.iroha) {
     testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
     testers.each { agent, platform ->
       for(t in platform) {
+        println("Platform size is: ${t.size()}")
         if(t.size() > 0) {
           def platformArch = t[0]
           def platformOS = t[1]
