@@ -165,6 +165,7 @@ node('master') {
     }
   }
   if(params.irohaBindings) {
+    println('Running bindings')
     builders = agentsMap['build'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
     builders.each { agent, platform ->
       for(t in platform) {
@@ -179,6 +180,7 @@ node('master') {
             platformOS = 'linux'
           }
           if(params.JavaBindings) {
+            println('Running bindings 2')
             jobs.add([bindings.buildSteps(agent, platformArch, platformOS, params.JBBuildType,
               params.JBPackageName, 'java', environmentList, dockerImage)])
           }

@@ -130,8 +130,7 @@ def pythonBindings(os, buildType=Release) {
 //   return artifactsPath
 // }
 
-def buildSteps(String label, String arch, String os, String buildType, String packageName,
-  String lang, environment, dockerImage) {
+def buildSteps(String label, String arch, String os, String buildType, String packageName, String lang, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
