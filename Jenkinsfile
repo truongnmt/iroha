@@ -3,7 +3,7 @@ properties([
     booleanParam(defaultValue: false, description: 'Build `iroha`', name: 'iroha'),
     booleanParam(defaultValue: false, description: 'Run iroha tests?', name: 'irohaTests'),
     booleanParam(defaultValue: false, description: 'Collect iroha coverage?', name: 'irohaCoverage'),
-    booleanParam(defaultValue: false, description: 'Build `bindings`', name: 'irohaBindings'),
+    booleanParam(defaultValue: true, description: 'Build `bindings`', name: 'irohaBindings'),
     booleanParam(defaultValue: false, name: 'amd64'),
     booleanParam(defaultValue: true, name: 'arm64'),
     booleanParam(defaultValue: false, name: 'armhf'),
@@ -179,8 +179,8 @@ node('master') {
             platformOS = 'linux'
           }
           if(params.JavaBindings) {
-            jobs.add([bindings.javaBindings(agent, platformArch, platformOS, params.JBBuildType,
-              params.JBPackageName, environmentList, dockerImage)])
+            jobs.add([bindings.buildSteps(agent, platformArch, platformOS, params.JBBuildType,
+              params.JBPackageName, 'java', environmentList, dockerImage)])
           }
         }
       }

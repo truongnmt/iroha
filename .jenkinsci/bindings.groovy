@@ -130,7 +130,8 @@ def pythonBindings(os, buildType=Release) {
 //   return artifactsPath
 // }
 
-def buildSteps(String label, String arch, String os, String buildType, String packageName, environment, dockerImage) {
+def buildSteps(String label, String arch, String os, String buildType, String packageName,
+  String lang, environment, dockerImage) {
   return {
     node(label) {
       withEnv(environment) {
@@ -142,13 +143,15 @@ def buildSteps(String label, String arch, String os, String buildType, String pa
         dir(workspace) {
           // then checkout into actual workspace
           checkout scm
-          if(dockerImage) {
-            docker.image(dockerImage).inside {
+          if(lang == 'java') {
+            if(dockerImage) {
+              docker.image(dockerImage).inside {
+                javaBindings(buildType, os, packageName)
+              }
+            }
+            else {
               javaBindings(buildType, os, packageName)
             }
-          }
-          else {
-            javaBindings(buildType, os, packageName)
           }
         }
       }
