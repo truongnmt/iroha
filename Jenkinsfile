@@ -113,7 +113,6 @@ node('master') {
     "GIT_RAW_BASE_URL": "https://raw.githubusercontent.com/hyperledger/iroha",
     "DOCKER_REGISTRY_CREDENTIALS_ID": 'docker-hub-credentials'
   ]
-  sh("echo build type ${params.IrohaBuildType}")
 }
 environment.each { it ->
   environmentList.add("${it.key}=${it.value}")
@@ -151,7 +150,7 @@ def testSteps(String label, String arch, String os, Boolean coverage, environmen
         //def workspace = "/var/jenkins/workspace/97acaa2bc1fa1db62e6a0531901e0f41886422ce-99-arm64-debian_stretch"
         dir(workspace) {
           testBuild = load ".jenkinsci/debug-test.groovy"
-          testBuild.doDebugTest(workspace)
+          testBuild.doDebugTest(workspace, dockerImage)
         }
       }
     }
@@ -199,6 +198,7 @@ if(params.iroha) {
           // windows and mac are built on a host, not in docker
           if(['ubuntu_xenial', 'ubuntu_bionic', 'debian_stretch'].contains(platformOS)) {
             //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
+            dockerImage = 'local/linux-test-env'
           }
           job = testSteps(agent, platformArch, platformOS,
                           params.irohaCoverage, environmentList, dockerImage)
