@@ -36,22 +36,22 @@ def javaBindings(buildType, os, packageName, scmVars) {
   return artifactsPath
 }
 
-def pythonBindings(os, buildType=Release) {
+def pythonBindings(buildType, os, scmVars) {
   def currentPath = sh(script: "pwd", returnStdout: true).trim()
-  def commit = env.GIT_COMMIT
+  def commit = scmVars.GIT_COMMIT
   def supportPython2 = "OFF"
   def artifactsPath = sprintf('%1$s/python-bindings-%2$s-%3$s-%4$s-%5$s-%6$s.zip',
-    [currentPath, env.PBVersion, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
+    [currentPath, params.PBVersion, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   def cmakeOptions = ""
   if (os == 'windows') {
-    sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
+    sh "mkdir -p /tmp/${scmVars.GIT_COMMIT}/bindings-artifact"
     cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
   }
-  if (os == 'linux') {
-    // do not use preinstalled libed25519
-    sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
-  }
-  if (env.PBVersion == "python2") { supportPython2 = "ON" }
+  // if (os == 'linux') {
+  //   // do not use preinstalled libed25519
+  //   sh "rm -rf \$STAGING/include/ed25519*; unlink \$STAGING/lib/libed25519.so; rm -f \$STAGING/lib/libed25519.so.*"
+  // }
+  if (params.PBVersion == "python2") { supportPython2 = "ON" }
   sh """
     cmake \
       -Hshared_model \
@@ -64,7 +64,7 @@ def pythonBindings(os, buildType=Release) {
   def parallelismParam = (os == 'windows') ? '' : "-j${params.PARALLELISM}"
   sh "cmake --build build --target irohapy -- ${parallelismParam}"
   sh "cmake --build build --target python_tests"
-  sh "cd build; ctest -R python --output-on-failure"
+  //sh "cd build; ctest -R python --output-on-failure"
   if (os == 'linux') {
     sh """
       protoc --proto_path=schema \
@@ -97,9 +97,6 @@ def pythonBindings(os, buildType=Release) {
     """
   if (os == 'windows') {
     sh "cp $artifactsPath /tmp/${env.GIT_COMMIT}/bindings-artifact"
-  }
-  else {
-    sh "cp $artifactsPath /tmp/bindings-artifact"
   }
   return artifactsPath
 }
@@ -151,6 +148,16 @@ def buildSteps(String label, String arch, String os, String buildType, String pa
             }
             else {
               javaBindings(buildType, os, packageName, scmVars)
+            }
+          }
+          if(lang == 'python') {
+            if(dockerImage) {
+              docker.image(dockerImage).inside {
+                pythonBindings(buildType, os, packageName, scmVars)
+              }
+            }
+            else {
+              pythonBindings(buildType, os, packageName, scmVars)
             }
           }
         }
