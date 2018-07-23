@@ -31,6 +31,8 @@ properties([
 
 def environmentList = []
 def environment = [:]
+def tasks = [:]
+def jobs = []
 def agentLabels = ['amd64-agent': 'ec2-fleet',
                    'arm64-agent': 'armv8-cross',
                    'armhf-agent': 'armv7-cross',
@@ -101,6 +103,7 @@ def userInputArchOsTuples() {
 
 node('master') {
   def scmVars = checkout scm
+  def iroha = load "./jenkinsci/iroha.groovy"
   environment = [
     "CCACHE_DIR": "/opt/.ccache",
     "DOCKER_REGISTRY_BASENAME": "hyperledger/iroha",
@@ -113,9 +116,51 @@ node('master') {
     "GIT_RAW_BASE_URL": "https://raw.githubusercontent.com/hyperledger/iroha",
     "DOCKER_REGISTRY_CREDENTIALS_ID": 'docker-hub-credentials'
   ]
-}
-environment.each { it ->
-  environmentList.add("${it.key}=${it.value}")
+  environment.each { it ->
+    environmentList.add("${it.key}=${it.value}")
+  }
+  // build Iroha binaries
+  if(params.iroha) {
+    builders = agentsMap['build'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
+    builders.each { agent, platform ->
+      for(t in platform) {
+        if(t.size() > 0) {
+          def platformArch = t[0]
+          def platformOS = t[1]
+          def dockerImage = ''
+          // windows and mac are built on a host, not in docker
+          if(['ubuntu_xenial', 'ubuntu_bionic', 'debian_stretch'].contains(platformOS)) {
+            platformOS = platformOS.replaceAll('_', '-')
+            dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
+          }
+          jobs.add([iroha.buildSteps(agent, platformArch, platformOS, params.irohaBuildType,
+            params.irohaCoverage, environmentList, dockerImage)])
+        }
+      }
+    }
+    // run tests if required
+    if(params.irohaTests) {
+      testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
+      println("testers is: ${testers}")
+      testers.each { agent, platform ->
+        for(t in platform) {
+          if(t.size() > 0) {
+            def platformArch = t[0]
+            def platformOS = t[1]
+            def dockerImage = ''
+            // windows and mac are built on a host, not in docker
+            if(['ubuntu_xenial', 'ubuntu_bionic', 'debian_stretch'].contains(platformOS)) {
+              //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
+              dockerImage = 'local/linux-test-env'
+            }
+            job = iroha.testSteps(agent, platformArch, platformOS,
+                            params.irohaCoverage, environmentList, dockerImage)
+            jobs.collect { it.add(job) }
+          }
+        }
+      }
+    }
+  }
 }
 
 // TODO: coverage:class java.lang.String,
@@ -157,60 +202,13 @@ def testSteps(String label, String arch, String os, Boolean coverage, environmen
   }
 }
 
-def stubSteps(label, arch, os, buildType, coverage, environment, dockerImage) {
-  return {
-    node('master') {
-      println("label:${label.getClass()}, arch:${arch.getClass()}, os:${os.getClass()}, coverage:${coverage.getClass()}, environment:${environment.getClass()}, dockerImage:${dockerImage.getClass()}")
-    }
-  }
-}
-
-def tasks = [:]
-def jobs = []
-// build Iroha binaries
-if(params.iroha) {
-  builders = agentsMap['build'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
-  builders.each { agent, platform ->
-    for(t in platform) {
-      if(t.size() > 0) {
-        def platformArch = t[0]
-        def platformOS = t[1]
-        def dockerImage = ''
-        // windows and mac are built on a host, not in docker
-        if(['ubuntu_xenial', 'ubuntu_bionic', 'debian_stretch'].contains(platformOS)) {
-          platformOS = platformOS.replaceAll('_', '-')
-          dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${platformOS}-${platformArch}"
-        }
-        jobs.add([buildSteps(agent, platformArch, platformOS, params.irohaBuildType,
-          params.irohaCoverage, environmentList, dockerImage)])
-      }
-    }
-  }
-  // run tests if required
-  if(params.irohaTests) {
-    testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
-    println("testers is: ${testers}")
-    testers.each { agent, platform ->
-      for(t in platform) {
-        println("Platform size is: ${t.size()}")
-        if(t.size() > 0) {
-          def platformArch = t[0]
-          def platformOS = t[1]
-          def dockerImage = ''
-          // windows and mac are built on a host, not in docker
-          if(['ubuntu_xenial', 'ubuntu_bionic', 'debian_stretch'].contains(platformOS)) {
-            //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
-            dockerImage = 'local/linux-test-env'
-          }
-          println("platformArch is: ${platformArch}, platformOS is: ${platformOS}")
-          job = testSteps(agent, platformArch, platformOS,
-                          params.irohaCoverage, environmentList, dockerImage)
-          jobs.collect { it.add(job) }
-        }
-      }
-    }
-  }
-}
+// def stubSteps(label, arch, os, buildType, coverage, environment, dockerImage) {
+//   return {
+//     node('master') {
+//       println("label:${label.getClass()}, arch:${arch.getClass()}, os:${os.getClass()}, coverage:${coverage.getClass()}, environment:${environment.getClass()}, dockerImage:${dockerImage.getClass()}")
+//     }
+//   }
+// }
 
 if(jobs) {
   for(int i=0; i<jobs.size(); i++) {
