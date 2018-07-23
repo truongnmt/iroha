@@ -188,7 +188,6 @@ if(params.iroha) {
   }
   // run tests if required
   if(params.irohaTests) {
-    println('Running tests')
     testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
     testers.each { agent, platform ->
       for(t in platform) {
@@ -201,6 +200,7 @@ if(params.iroha) {
             //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
             dockerImage = 'local/linux-test-env'
           }
+          println(platformArch, platformOS)
           job = testSteps(agent, platformArch, platformOS,
                           params.irohaCoverage, environmentList, dockerImage)
           jobs.collect { it.add(job) }
