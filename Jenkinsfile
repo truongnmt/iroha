@@ -127,9 +127,9 @@ def buildSteps(String label, String arch, String os, String buildType, Boolean c
       withEnv(environment) {
         // checkout to expose env vars
         def scmVars = checkout scm
-        //def workspace = "/var/jenkins/workspace/97acaa2bc1fa1db62e6a0531901e0f41886422ce-99-arm64-debian_stretch"
-        def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
-        sh("mkdir -p $workspace")
+        def workspace = "/var/jenkins/workspace/4c4825402c5cc2d4cb3217a9b62fe444499b2ca0-189-arm64-debian-stretch"
+        //def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
+        //sh("mkdir -p $workspace")
         dir(workspace) {
           // then checkout into actual workspace
           checkout scm
@@ -146,8 +146,8 @@ def testSteps(String label, String arch, String os, Boolean coverage, environmen
     node(label) {
       withEnv(environment) {
         def scmVars = checkout scm
-        def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
-        //def workspace = "/var/jenkins/workspace/97acaa2bc1fa1db62e6a0531901e0f41886422ce-99-arm64-debian_stretch"
+        //def workspace = "${env.WS_BASE_DIR}/${scmVars.GIT_COMMIT}-${env.BUILD_NUMBER}-${arch}-${os}"
+        def workspace = "/var/jenkins/workspace/4c4825402c5cc2d4cb3217a9b62fe444499b2ca0-189-arm64-debian-stretch"
         dir(workspace) {
           testBuild = load ".jenkinsci/debug-test.groovy"
           testBuild.doDebugTest(workspace, dockerImage)
@@ -187,7 +187,7 @@ if(params.iroha) {
     }
   }
   // run tests if required
-  if(irohaTests) {
+  if(params.irohaTests) {
     testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
     testers.each { agent, platform ->
       for(t in platform) {
