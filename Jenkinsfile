@@ -200,7 +200,7 @@ if(params.iroha) {
             //dockerImage = "${environment['DOCKER_REGISTRY_BASENAME']}:crossbuild-${os}-${arch}"
             dockerImage = 'local/linux-test-env'
           }
-          println(platformArch, platformOS)
+          println("platformArch is: ${platformArch}, platformOS is: ${platformOS}")
           job = testSteps(agent, platformArch, platformOS,
                           params.irohaCoverage, environmentList, dockerImage)
           jobs.collect { it.add(job) }
