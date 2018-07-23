@@ -2,7 +2,7 @@
 
 def javaBindings(buildType, os, packageName) {
   def currentPath = sh(script: "pwd", returnStdout: true).trim()
-  def commit = env.GIT_COMMIT
+  def commit = scmVars.GIT_COMMIT
   def artifactsPath = sprintf('%1$s/java-bindings-%2$s-%3$s-%4$s-%5$s.zip',
     [currentPath, buildType, os, sh(script: 'date "+%Y%m%d"', returnStdout: true).trim(), commit.substring(0,6)])
   def cmakeOptions = ""
@@ -30,7 +30,7 @@ def javaBindings(buildType, os, packageName) {
       zip -r $artifactsPath *.dll *.lib *.manifest *.exp libirohajava.so \$(echo ${packageName} | cut -d '.' -f1); \
       popd"
   if (os == 'windows') {
-    sh "cp $artifactsPath /tmp/${env.GIT_COMMIT}/bindings-artifact"
+    sh "cp $artifactsPath /tmp/${scmVars.GIT_COMMIT}/bindings-artifact"
   }
   return artifactsPath
 }
