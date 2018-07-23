@@ -115,7 +115,7 @@ node('master') {
     "IROHA_POSTGRES_PORT": "5432",
     "WS_BASE_DIR": "/var/jenkins/workspace",
     "GIT_RAW_BASE_URL": "https://raw.githubusercontent.com/hyperledger/iroha",
-    "DOCKER_REGISTRY_CREDENTIALS_ID": 'docker-hub-credentials'
+    "DOCKER_REGISTRY_CREDENTIALS_ID": 'docker-hub-credentials',
     "JAVA_HOME": "/usr/lib/jvm/java-8-oracle"
   ]
   environment.each { e ->
