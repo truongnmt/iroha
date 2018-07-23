@@ -188,6 +188,7 @@ if(params.iroha) {
   }
   // run tests if required
   if(params.irohaTests) {
+    println('Running tests')
     testers = agentsMap['test'].each { k, v -> v.retainAll(userInputArchOsTuples() as Object[])}
     testers.each { agent, platform ->
       for(t in platform) {
