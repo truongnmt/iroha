@@ -96,7 +96,7 @@ def doPythonBindings(os, buildType=Release) {
   }
 
   sh """ 
-    zip -j ${artifactsPath} build/bindings/*.{py,dll,so,pyd,lib,dll,exp,manifest} || true; \
+    zip -jq ${artifactsPath} build/bindings/*.{py,dll,so,pyd,lib,dll,exp,manifest} || true; \
     cp ${artifactsPath} /tmp/${commit}/bindings-artifact
   """
   
