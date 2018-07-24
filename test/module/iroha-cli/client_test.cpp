@@ -1,18 +1,6 @@
 /**
- * Copyright Soramitsu Co., Ltd. 2017 All Rights Reserved.
- * http://soramitsu.co.jp
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *        http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright Soramitsu Co., Ltd. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 #include "builders/protobuf/common_objects/proto_account_builder.hpp"
@@ -28,6 +16,7 @@
 
 #include "client.hpp"
 
+#include "execution/query_execution_impl.hpp"
 #include "main/server_runner.hpp"
 #include "torii/command_service.hpp"
 #include "torii/processor/query_processor_impl.hpp"
@@ -53,7 +42,8 @@ using namespace iroha::validation;
 using namespace shared_model::proto;
 
 using namespace std::chrono_literals;
-constexpr std::chrono::milliseconds proposal_delay = 10s;
+constexpr std::chrono::milliseconds initial_timeout = 1s;
+constexpr std::chrono::milliseconds nonfinal_timeout = 2 * 10s;
 
 class ClientServerTest : public testing::Test {
  public:
@@ -91,16 +81,16 @@ class ClientServerTest : public testing::Test {
         std::make_shared<iroha::model::converters::PbTransactionFactory>();
 
     //----------- Query Service ----------
-
-    auto qpi = std::make_shared<iroha::torii::QueryProcessorImpl>(storage);
-
     EXPECT_CALL(*storage, getWsvQuery()).WillRepeatedly(Return(wsv_query));
     EXPECT_CALL(*storage, getBlockQuery()).WillRepeatedly(Return(block_query));
+
+    auto qpi = std::make_shared<iroha::torii::QueryProcessorImpl>(
+        storage, std::make_shared<iroha::QueryExecutionImpl>(storage));
 
     //----------- Server run ----------------
     runner
         ->append(std::make_unique<torii::CommandService>(
-            tx_processor, storage, proposal_delay))
+            tx_processor, storage, initial_timeout, nonfinal_timeout))
         .append(std::make_unique<torii::QueryService>(qpi))
         .run()
         .match(
@@ -301,7 +291,7 @@ TEST_F(ClientServerTest, SendQueryWhenValid) {
   EXPECT_CALL(*wsv_query, getSignatories("admin@test"))
       .WillRepeatedly(Return(signatories));
 
-  EXPECT_CALL(*wsv_query, getAccountDetail("test@test"))
+  EXPECT_CALL(*wsv_query, getAccountDetail("test@test", "", ""))
       .WillOnce(Return(boost::make_optional(std::string("value"))));
 
   const std::vector<std::string> kRole{"role"};
