@@ -52,10 +52,10 @@ RUN git clone git://github.com/yyuu/pyenv.git .pyenv
 ENV HOME  /home/iroha-ci
 ENV PYENV_ROOT $HOME/.pyenv
 ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
-
+ENV PYTHON_CONFIGURE_OPTS "--enable-shared"
 RUN set -e; \
-    PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 2.7.15; \
-    PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.5.5; \
+    pyenv install 2.7.15; \
+    pyenv install 3.5.5; \
     pyenv global 2.7.15; \
     pip install --upgrade pip setuptools wheel twine grpcio grpcio_tools protobuf; \
     pyenv global 3.5.5; \
