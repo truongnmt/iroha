@@ -16,6 +16,13 @@ setup(name='iroha',
       package_data={
             'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
       },
+      install_requires=[
+            'protobuf>=3.5.2.post1',
+            'grpcio>=1.12.1'
+      ],
+      dependency_links=[
+        "https://pypi.org/simple"
+      ],
       classifiers=[
             'License :: OSI Approved :: Apache Software License',
             'Development Status :: 4 - Beta',
@@ -24,14 +31,11 @@ setup(name='iroha',
             'Programming Language :: Python :: 2.7',
             'Programming Language :: Python :: 3.5'
       ],
-      install_requires=[
-            'protobuf>=3.5.2.post1',
-            'grpcio>=1.12.1'
-      ],    
       project_urls={
         "Jenkins": "https://jenkins.soramitsu.co.jp/",
         "Nexus": "https://nexus.soramitsu.co.jp/",
         "Documentation": "https://iroha.readthedocs.io/en/latest/",
+        "Doxygen": "https://docs/iroha.tech/",
         "Source Code": "https://github.com/hyperledger/iroha",
       },
       zip_safe=False,

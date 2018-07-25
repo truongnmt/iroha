@@ -54,8 +54,8 @@ def doPythonBindings(os, buildType=Release) {
     cmakeOptions = "-DPYTHON_INCLUDE_DIR=/Users/jenkins/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/jenkins/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/Users/jenkins/.pyenv/versions/3.5.5/bin/python3.5"
   }
   if (os == 'linux') {
-    cmakeOptions = "-DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5"
-    // do not use preinstalled libed25519   
+    cmakeOptions = "-DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.so -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5"
+    // do not use preinstalled libed25519
     sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
   }
   if (env.PBVersion == "python2") { supportPython2 = "ON" }
@@ -72,7 +72,7 @@ def doPythonBindings(os, buildType=Release) {
   sh "cmake --build build --target irohapy -- ${parallelismParam}"
   sh "cmake --build build --target python_tests"
   sh "cd build; ctest -R python --output-on-failure"
-  if (os == 'mac' || os == 'linux') {
+  if (os ==~ /(mac|linux)/) {
     sh """
       protoc --proto_path=schema \
         --python_out=build/bindings \
