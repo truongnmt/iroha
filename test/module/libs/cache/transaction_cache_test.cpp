@@ -64,3 +64,18 @@ TEST_F(TransactionCacheTest, remove) {
   set->forEach([this](const auto &val) { number_of_calls++; });
   ASSERT_EQ(1, number_of_calls);
 }
+
+/**
+ * @given set with existed state
+ * @when  insert the set to target collection
+ * AND call forEach and push all elements to out set
+ * @then  check is first and out sets are the same
+ */
+TEST_F(TransactionCacheTest, checkElements) {
+  std::unordered_set<int> first = {1, 2, 3};
+  set->insertValues(first);
+
+  std::unordered_set<int> permutation;
+  set->forEach([&permutation](const auto &val) { permutation.insert(val); });
+  std::is_permutation(first.begin(), first.end(), permutation.begin());
+}
