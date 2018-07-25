@@ -18,7 +18,7 @@ def doPythonWheels(os, buildType=Release) {
       version += sh(script: 'date "+%Y%m%d"', returnStdout: true).trim()
     }
     else {
-       version =+ env.BUILD_NUMBER
+       version += env.BUILD_NUMBER
     } 
   }
 
