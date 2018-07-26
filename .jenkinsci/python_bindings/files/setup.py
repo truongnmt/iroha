@@ -12,7 +12,7 @@ setup(name='iroha',
       author='Soramitsu Co Ltd',
       author_email='ci@soramitsu.co.jp',
       license='Apache-2.0',
-      packages=find_packages(exclude=['dist','build','*.pyc', '.DS_Store', '.vscode', '__pycache__']),
+      packages=find_packages(exclude=['dist','build','*.pyc', '.DS_Store', '.vscode', '__pycache__', '*.bak']),
       package_data={
             'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
       },
