@@ -70,6 +70,7 @@ void Irohad::init() {
   initValidators();
   initOrderingGate();
   initSimulator();
+  initConsensusCache();
   initBlockLoader();
   initConsensusGate();
   initSynchronizer();
@@ -180,12 +181,18 @@ void Irohad::initSimulator() {
   log_->info("[Init] => init simulator");
 }
 
+void Irohad::initConsensusCache() {
+  cache_block = std::make_shared<ConsensusCacheBlock>();
+
+  log_->info("[Init] => init consensus block cache");
+}
+
 /**
  * Initializing block loader
  */
 void Irohad::initBlockLoader() {
   block_loader =
-      loader_init.initBlockLoader(initPeerQuery(), storage->getBlockQuery());
+      loader_init.initBlockLoader(initPeerQuery(), storage->getBlockQuery(), cache_block);
 
   log_->info("[Init] => block loader");
 }

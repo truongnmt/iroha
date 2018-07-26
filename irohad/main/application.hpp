@@ -125,6 +125,8 @@ class Irohad {
 
   virtual void initSimulator();
 
+  virtual void initConsensusCache();
+
   virtual void initBlockLoader();
 
   virtual void initConsensusGate();
@@ -172,6 +174,9 @@ class Irohad {
 
   // simulator
   std::shared_ptr<iroha::simulator::Simulator> simulator;
+
+  // block cache for consensus and block loader
+  std::shared_ptr<ConsensusCacheBlock> cache_block;
 
   // block loader
   std::shared_ptr<iroha::network::BlockLoader> block_loader;
