@@ -51,17 +51,6 @@ if (TESTING)
   if (MSVC)
     set(CMAKE_MODULE_PATH "")
     find_package(GTest REQUIRED)
-    add_library(gtest::gtest INTERFACE)
-    add_library(gtest::main INTERFACE)
-    add_library(gmock::gmock INTERFACE)
-    add_library(gmock::main INTERFACE)
-
-    target_link_libraries(gtest::gtest INTERFACE
-        GTest::GTest
-        )
-    target_link_libraries(gtest::main INTERFACE
-        GTest::Main
-        )
     set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/Modules)
   else ()
     find_package(gtest)

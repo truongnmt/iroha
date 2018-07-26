@@ -16,7 +16,7 @@
 #
 add_library(acceptance_fixture acceptance_fixture.cpp)
 target_link_libraries(acceptance_fixture
-    gtest::gtest
+    GTest::GTest
     integration_framework
     shared_model_proto_builders
     )

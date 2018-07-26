@@ -1,7 +1,7 @@
-add_library(gtest::gtest UNKNOWN IMPORTED)
-add_library(gtest::main UNKNOWN IMPORTED)
-add_library(gmock::gmock UNKNOWN IMPORTED)
-add_library(gmock::main UNKNOWN IMPORTED)
+add_library(GTest::GTest UNKNOWN IMPORTED)
+add_library(GTest::Main UNKNOWN IMPORTED)
+add_library(GMock::GMock UNKNOWN IMPORTED)
+add_library(GMock::Main UNKNOWN IMPORTED)
 
 find_path(gtest_INCLUDE_DIR gtest/gtest.h)
 mark_as_advanced(gtest_INCLUDE_DIR)
@@ -32,8 +32,8 @@ find_package_handle_standard_args(gtest DEFAULT_MSG
 
 set(URL https://github.com/google/googletest)
 set(VERSION ec44c6c1675c25b9827aacd08c02433cccde7780)
-set_target_description(gtest::gtest "Unit testing library" ${URL} ${VERSION})
-set_target_description(gmock::gmock "Mocking library" ${URL} ${VERSION})
+set_target_description(GTest::GTest "Unit testing library" ${URL} ${VERSION})
+set_target_description(GMock::GMock "Mocking library" ${URL} ${VERSION})
 
 if (NOT gtest_FOUND)
   ExternalProject_Add(google_test
@@ -64,30 +64,30 @@ if (NOT gtest_FOUND)
   file(MAKE_DIRECTORY ${gtest_INCLUDE_DIR})
   file(MAKE_DIRECTORY ${gmock_INCLUDE_DIR})
 
-  add_dependencies(gtest::gtest google_test)
-  add_dependencies(gtest::main google_test)
-  add_dependencies(gmock::gmock google_test)
-  add_dependencies(gmock::main google_test)
+  add_dependencies(GTest::GTest google_test)
+  add_dependencies(GTest::Main google_test)
+  add_dependencies(GMock::GMock google_test)
+  add_dependencies(GMock::Main google_test)
 endif ()
 
-set_target_properties(gtest::gtest PROPERTIES
+set_target_properties(GTest::GTest PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${gtest_INCLUDE_DIR}
     INTERFACE_LINK_LIBRARIES Threads::Threads
     IMPORTED_LOCATION ${gtest_LIBRARY}
     )
-set_target_properties(gtest::main PROPERTIES
+set_target_properties(GTest::Main PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${gtest_INCLUDE_DIR}
-    INTERFACE_LINK_LIBRARIES gtest::gtest
+    INTERFACE_LINK_LIBRARIES GTest::GTest
     IMPORTED_LOCATION ${gtest_MAIN_LIBRARY}
     )
 
-set_target_properties(gmock::gmock PROPERTIES
+set_target_properties(GMock::GMock PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${gmock_INCLUDE_DIR}
     INTERFACE_LINK_LIBRARIES Threads::Threads
     IMPORTED_LOCATION ${gmock_LIBRARY}
     )
-set_target_properties(gmock::main PROPERTIES
+set_target_properties(GMock::Main PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${gmock_INCLUDE_DIR}
-    INTERFACE_LINK_LIBRARIES gmock::gmock
+    INTERFACE_LINK_LIBRARIES GMock::GMock
     IMPORTED_LOCATION ${gmock_MAIN_LIBRARY}
     )
