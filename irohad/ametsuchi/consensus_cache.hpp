@@ -6,29 +6,27 @@
 #ifndef IROHA_CONSENSUS_CACHE_H
 #define IROHA_CONSENSUS_CACHE_H
 
-#include <boost/optional.hpp>
+#include <memory>
 
 /**
  * Stores pointer to some data came from the consensus
  */
-template <typename DataType,
-          template <typename> class WrapperType = boost::optional>
+template <typename DataType>
 class ConsensusCache {
  public:
   using DataPointer = std::shared_ptr<DataType>;
-  using WrappedData = WrapperType<DataPointer>;
 
   /**
    * Insert data to the cache
-   * @param data to be inserted
+   * @param pointer to the data to be inserted
    */
   virtual void insert(DataPointer data) = 0;
 
   /**
    * Get data from the cache
-   * @return wrapped data
+   * @return pointer to the stored data
    */
-  virtual WrappedData get() const = 0;
+  virtual DataPointer get() const = 0;
 
   /**
    * Delete data inside the cache

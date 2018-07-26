@@ -18,11 +18,11 @@ void ConsensusCacheBlock::insert(ConsensusCache::DataPointer data) {
   stored_block_ = data;
 }
 
-ConsensusCache<shared_model::interface::BlockVariant>::WrappedData
+ConsensusCache<shared_model::interface::BlockVariant>::DataPointer
 ConsensusCacheBlock::get() const {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  return stored_block_ ? boost::make_optional(stored_block_) : boost::none;
+  return stored_block_ ? stored_block_ : nullptr;
 }
 
 void ConsensusCacheBlock::release() {

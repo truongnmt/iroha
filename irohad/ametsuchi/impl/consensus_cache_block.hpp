@@ -25,7 +25,7 @@ class ConsensusCacheBlock
 
   void insert(DataPointer data) override;
 
-  WrappedData get() const override;
+  DataPointer get() const override;
 
   void release() override;
 

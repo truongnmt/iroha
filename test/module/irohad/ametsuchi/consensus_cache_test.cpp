@@ -39,7 +39,7 @@ TEST_F(ConsensusCacheBlockTest, SingleThreadedCache) {
       std::make_shared<shared_model::interface::BlockVariant>(
           std::move(block)));
   ASSERT_TRUE(consensus_cache_block->get());
-  ASSERT_EQ(default_block_height, consensus_cache_block->get().get()->height());
+  ASSERT_EQ(default_block_height, consensus_cache_block->get()->height());
 
   consensus_cache_block->release();
   ASSERT_FALSE(consensus_cache_block->get());
@@ -69,7 +69,7 @@ TEST_F(ConsensusCacheBlockTest, MultithreadedCache) {
   std::thread reader{[this, &reader_has_started, &cv]() {
     reader_has_started = true;
     cv.notify_all();
-    ASSERT_TRUE(consensus_cache_block->get().get());
+    ASSERT_TRUE(consensus_cache_block->get());
   }};
   std::unique_lock<std::mutex> lock(mutex);
   cv.wait(lock, [&reader_has_started]() { return reader_has_started; });
