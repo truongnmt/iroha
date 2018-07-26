@@ -6,7 +6,7 @@
 #ifndef IROHA_CONSENSUS_CACHE_BLOCK_H
 #define IROHA_CONSENSUS_CACHE_BLOCK_H
 
-#include "ametsuchi/consensus_cache.hpp"
+#include "ametsuchi/pointer_cache.hpp"
 
 #include "interfaces/iroha_internal/block_variant.hpp"
 
@@ -14,7 +14,7 @@
  * Thread-safe implementation of consensus cache for storing block variants
  */
 class ConsensusCacheBlock
-    : public ConsensusCache<shared_model::interface::BlockVariant> {
+    : public PointerCache<shared_model::interface::BlockVariant> {
  public:
   ConsensusCacheBlock();
   explicit ConsensusCacheBlock(DataPointer block);

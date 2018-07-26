@@ -9,16 +9,16 @@
 
 ConsensusCacheBlock::ConsensusCacheBlock() = default;
 
-ConsensusCacheBlock::ConsensusCacheBlock(ConsensusCache::DataPointer block)
+ConsensusCacheBlock::ConsensusCacheBlock(PointerCache::DataPointer block)
     : stored_block_(std::move(block)) {}
 
-void ConsensusCacheBlock::insert(ConsensusCache::DataPointer data) {
+void ConsensusCacheBlock::insert(PointerCache::DataPointer data) {
   std::lock_guard<std::mutex> lock(mutex_);
 
   stored_block_ = data;
 }
 
-ConsensusCache<shared_model::interface::BlockVariant>::DataPointer
+PointerCache<shared_model::interface::BlockVariant>::DataPointer
 ConsensusCacheBlock::get() const {
   std::lock_guard<std::mutex> lock(mutex_);
 

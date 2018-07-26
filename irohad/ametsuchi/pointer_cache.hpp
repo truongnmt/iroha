@@ -9,12 +9,13 @@
 #include <memory>
 
 /**
- * Stores pointer to some data came from the consensus
+ * Stores pointer to some data
  */
-template <typename DataType>
-class ConsensusCache {
+template <typename DataType,
+          template <typename> class PointerType = std::shared_ptr>
+class PointerCache {
  public:
-  using DataPointer = std::shared_ptr<DataType>;
+  using DataPointer = PointerType<DataType>;
 
   /**
    * Insert data to the cache
@@ -33,7 +34,7 @@ class ConsensusCache {
    */
   virtual void release() = 0;
 
-  virtual ~ConsensusCache() = default;
+  virtual ~PointerCache() = default;
 };
 
 #endif  // IROHA_CONSENSUS_CACHE_H
