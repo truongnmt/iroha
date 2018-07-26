@@ -5,7 +5,7 @@ class BinaryDistribution(Distribution):
       def has_ext_modules(self):
             return True
 
-setup(name='iroha',
+setup(name='iroha-hl',
       version='{{ PYPI_VERSION }}',
       description='Python library for Hyperledger Iroha',
       url='http://github.com/hyperledger/iroha',
@@ -14,7 +14,7 @@ setup(name='iroha',
       license='Apache-2.0',
       packages=find_packages(exclude=['dist','build','*.pyc', '.DS_Store', '.vscode', '__pycache__', '*.bak']),
       package_data={
-            'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
+            'iroha-hl': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
       },
       install_requires=[
             'protobuf>=3.5.2.post1',

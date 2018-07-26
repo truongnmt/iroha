@@ -48,13 +48,27 @@ def doPythonBindings(os, buildType=Release) {
 
   sh "mkdir -p /tmp/${commit}/bindings-artifact"
   if (os == 'windows') {
-    cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
+    cmakeOptions = """ \\
+      -DPYTHON_INCLUDE_DIR=/c/users/administrator/anaconda64/envs/py3.5/include/ \\
+      -DPYTHON_LIBRARY=/c/users/administrator/anaconda64/envs/py3.5/python35.dll \\
+      -DPYTHON_EXECUTABLE=/c/users/administrator/anaconda64/envs/py3.5/include/python3.exe \\
+      -DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles" \\
+    """
   }
   if (os == 'mac') {
-    cmakeOptions = "-DPYTHON_INCLUDE_DIR=/Users/jenkins/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/Users/jenkins/.pyenv/versions/3.5.5/lib/libpython3.5m.a -DPYTHON_EXECUTABLE=/Users/jenkins/.pyenv/versions/3.5.5/bin/python3.5"
+    cmakeOptions = """ \\
+      -DPYTHON_INCLUDE_DIR=/Users/jenkins/.pyenv/versions/3.5.5/include/python3.5m/ \\
+      -DPYTHON_LIBRARY=/Users/jenkins/.pyenv/versions/3.5.5/lib/libpython3.5m.a \\
+      -DPYTHON_EXECUTABLE=/Users/jenkins/.pyenv/versions/3.5.5/bin/python3.5 \\
+    """
   }
   if (os == 'linux') {
-    cmakeOptions = "-DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.so -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5"
+    cmakeOptions = """ \\
+      -DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ \\
+      -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.so \\
+      -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5 \\
+    """
+
     // do not use preinstalled libed25519
     sh "rm -rf /usr/local/include/ed25519*; unlink /usr/local/lib/libed25519.so; rm -f /usr/local/lib/libed25519.so.1.2.2"
   }
@@ -83,7 +97,7 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (os == 'windows') {
     sh """
-      source activate ${envs}; \
+      source activate py3.5; \
       protoc --proto_path=schema \
         --proto_path=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/buildtrees/protobuf/src/protobuf-3.5.1-win32/include \
         --python_out=build/bindings \
@@ -92,7 +106,6 @@ def doPythonBindings(os, buildType=Release) {
         --proto_path=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/buildtrees/protobuf/src/protobuf-3.5.1-win32/include \
         --proto_path=schema --python_out=build/bindings --grpc_python_out=build/bindings \
         endpoint.proto yac.proto ordering.proto loader.proto \
-      source deactivate;
     """
   }
 
