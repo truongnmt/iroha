@@ -44,7 +44,7 @@ def doPythonBindings(os, buildType=Release) {
   def cmakeOptions = ""
   if (os == 'windows') {
     sh "mkdir -p /tmp/${env.GIT_COMMIT}/bindings-artifact"
-    cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles"'
+    cmakeOptions = '-DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles" -DPYTHON_INCLUDE_DIR=/c/users/administrator/anaconda64/envs/py3.5/include/ -DPYTHON_LIBRARY=/c/users/administrator/anaconda64/envs/py3.5/python35.dll -DPYTHON_EXECUTABLE=/c/users/administrator/anaconda64/envs/py3.5/include/python3.exe'
   }
   if (os == 'linux') {
     // do not use preinstalled libed25519
@@ -52,6 +52,7 @@ def doPythonBindings(os, buildType=Release) {
   }
   if (env.PBVersion == "python2") { supportPython2 = "ON" }
   sh """
+    source activate py3.5; \
     cmake \
       -Hshared_model \
       -Bbuild \
@@ -83,7 +84,8 @@ def doPythonBindings(os, buildType=Release) {
         block.proto primitive.proto commands.proto queries.proto responses.proto endpoint.proto
     """
     sh """
-      ${env.PBVersion} -m grpc_tools.protoc \
+      source activate py3.5; \
+      python grpc_tools.protoc \
         --proto_path=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/buildtrees/protobuf/src/protobuf-3.5.1-win32/include \
         --proto_path=schema --python_out=build/bindings --grpc_python_out=build/bindings \
         endpoint.proto yac.proto ordering.proto loader.proto
