@@ -50,8 +50,8 @@ def doPythonBindings(os, buildType=Release) {
   if (os == 'windows') {
     cmakeOptions = """ \\
       -DPYTHON_INCLUDE_DIR=/c/users/administrator/anaconda64/envs/py3.5/include/ \\
-      -DPYTHON_LIBRARY=/c/users/administrator/anaconda64/envs/py3.5/python35.dll \\
-      -DPYTHON_EXECUTABLE=/c/users/administrator/anaconda64/envs/py3.5/include/python3.exe \\
+      -DPYTHON_LIBRARY=/c/users/administrator/anaconda64/envs/py3.5/libs/python35.lib \\
+      -DPYTHON_EXECUTABLE=/c/users/administrator/anaconda64/envs/py3.5/python \\
       -DCMAKE_TOOLCHAIN_FILE=/c/Users/Administrator/Downloads/vcpkg-master/vcpkg-master/scripts/buildsystems/vcpkg.cmake -G "NMake Makefiles" \\
     """
   }
