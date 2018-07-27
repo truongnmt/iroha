@@ -3,23 +3,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <thread>
+
 #include <gtest/gtest.h>
 
-#include "ametsuchi/impl/consensus_cache_block.hpp"
-#include "module/irohad/ametsuchi/ametsuchi_fixture.hpp"
+#include "cache/single_pointer_cache.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 
+using namespace iroha::cache;
+
 class ConsensusCacheBlockTest : public ::testing::Test {
+  using ConsensusBlockCacheType =
+      SinglePointerCache<shared_model::interface::BlockVariant>;
+
  protected:
   void SetUp() override {
-    consensus_cache_block = std::make_shared<ConsensusCacheBlock>();
+    consensus_cache_block = std::make_shared<ConsensusBlockCacheType>();
   }
 
   void TearDown() override {
     consensus_cache_block.reset();
   }
 
-  std::shared_ptr<ConsensusCacheBlock> consensus_cache_block;
+  std::shared_ptr<ConsensusBlockCacheType> consensus_cache_block;
   const shared_model::interface::types::HeightType default_block_height = 5;
 };
 
