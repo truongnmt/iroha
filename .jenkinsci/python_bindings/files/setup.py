@@ -14,7 +14,7 @@ setup(name='iroha-hl',
       license='Apache-2.0',
       packages=find_packages(exclude=['dist','build','*.pyc', '.DS_Store', '.vscode', '__pycache__', '*.bak']),
       package_data={
-            'iroha-hl': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
+            'iroha': ['_iroha.exp', '_iroha.lib', '_iroha.pyd', '_iroha.pyd.manifest', 'bindings.lib', 'libprotobuf.dll', '_iroha.so', '*.py']
       },
       install_requires=[
             'protobuf>=3.5.2.post1',

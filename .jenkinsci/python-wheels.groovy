@@ -23,13 +23,13 @@ def doPythonWheels(os, buildType=Release) {
   }
 
   sh """
-    mkdir -p wheels/iroha-hl; \
-    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha-hl &> /dev/null || true; \
+    mkdir -p wheels/iroha; \
+    cp build/bindings/*.{py,dll,so,pyd,lib,dll,exp,mainfest} wheels/iroha &> /dev/null || true; \
     cp .jenkinsci/python_bindings/files/setup.{py,cfg} wheels &> /dev/null || true; \
-    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha-hl/; \
+    cp .jenkinsci/python_bindings/files/__init__.py wheels/iroha/; \
     sed -i.bak 's/{{ PYPI_VERSION }}/${version}/g' wheels/setup.py; \
-    modules=(\$(find wheels/iroha-hl -type f -not -name '__init__.py' | sed 's/wheels\\/iroha-hl\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
-    for f in wheels/iroha-hl/*.py; do for m in "\${modules[@]}"; do sed -i.bak "s/import \$m/from . import \$m/g" \$f; done; done;
+    modules=(\$(find wheels/iroha -type f -not -name '__init__.py' | sed 's/wheels\\/iroha\\///g' | grep '\\.py\$' | sed -e 's/\\..*\$//')); \
+    for f in wheels/iroha/*.py; do for m in "\${modules[@]}"; do sed -i.bak "s/import \$m/from . import \$m/g" \$f; done; done;
   """
   if (os ==~ /(mac|linux)/) {
     sh """

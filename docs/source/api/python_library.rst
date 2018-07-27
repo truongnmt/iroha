@@ -40,21 +40,25 @@ From develop
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop/simple iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop/simple iroha-hl
 
 
 From release
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-release/simple iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-release/simple iroha-hl
 
 
 From develop-nightly
 
 .. code-block:: shell
 
-    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/simple iroha 
+    pip install -i https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/simple iroha-hl
+
+
+Now you can use library, just write ``import iroha``
+
 
 Pushing to PyPI
 ---------------
@@ -65,21 +69,21 @@ To develop
 
 .. code-block:: shell
 
-    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-develop/ /path/to/iroha/wheel/iroha.whl
+    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-upload-develop/ /path/to/iroha/wheel/iroha.whl
 
 
 To release
 
 .. code-block:: shell
 
-    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-release/ /path/to/iroha/wheel/iroha.whl
+    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-upload-release/ /path/to/iroha/wheel/iroha.whl
 
 
 To develop-nightly
 
 .. code-block:: shell
 
-    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-develop-nightly/ /path/to/iroha/wheel/iroha.whl
+    twine upload --repository-url https://nexus.soramitsu.co.jp/repository/pypi-upload-develop-nightly/ /path/to/iroha/wheel/iroha.whl
 
 Adding iroha PyPI repositories
 ---------------
@@ -111,12 +115,12 @@ Save it and exit. Now you can download packages by this command:
 
 .. code-block:: shell
 
-    pip install -r iroha-develop iroha
+    pip install -r iroha-develop iroha-hl
 
 And push it: 
 
 .. code-block:: shell
 
-    twine upload -r iroha-develop iroha
+    twine upload -r iroha-develop iroha-hl
 
 Where ``iroha-develop`` - repository name
