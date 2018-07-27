@@ -18,13 +18,12 @@ namespace iroha {
      */
     template <typename DataType>
     class SinglePointerCache {
+     public:
+      /**
+       * Pointer to data type
+       */
       using DataPointer = std::shared_ptr<DataType>;
 
-      DataPointer stored_data_;
-
-      mutable std::mutex mutex_;
-
-     public:
       /**
        * Insert data to the cache
        * @param pointer to the data to be inserted
@@ -41,6 +40,11 @@ namespace iroha {
        * Delete data inside the cache
        */
       void release();
+
+     private:
+      DataPointer stored_data_;
+
+      mutable std::mutex mutex_;
     };
 
     template <typename DataType>

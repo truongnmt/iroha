@@ -18,7 +18,3 @@ target_link_libraries(cache_test
         )
 
 addtest(single_pointer_cache_test single_pointer_cache_test.cpp)
-target_link_libraries(single_pointer_cache_test
-        shared_model_interfaces
-        shared_model_proto_backend
-        )
