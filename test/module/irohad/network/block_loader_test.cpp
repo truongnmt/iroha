@@ -19,7 +19,6 @@
 #include <grpc++/server.h>
 #include <grpc++/server_builder.h>
 #include <gtest/gtest.h>
-#include <framework/specified_visitor.hpp>
 
 #include "builders/common_objects/peer_builder.hpp"
 #include "builders/protobuf/common_objects/proto_peer_builder.hpp"
@@ -27,6 +26,7 @@
 #include "cryptography/crypto_provider/crypto_defaults.hpp"
 #include "cryptography/hash.hpp"
 #include "datetime/time.hpp"
+#include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
@@ -41,6 +41,7 @@ using namespace shared_model::crypto;
 
 using testing::A;
 using testing::Return;
+using testing::_;
 
 using wPeer = std::shared_ptr<shared_model::interface::Peer>;
 using wBlock = std::shared_ptr<shared_model::interface::Block>;
@@ -91,7 +92,7 @@ class BlockLoaderTest : public testing::Test {
 
   // wrap block, so it could be inserted into consensus cache
   iroha::consensus::ConsensusBlockCache::DataPointer wrapBlock(
-      std::shared_ptr<shared_model::interface::Block> block) {
+      std::shared_ptr<shared_model::interface::Block> block) const {
     return std::make_shared<shared_model::interface::BlockVariant>(
         std::move(block));
   }
@@ -226,7 +227,7 @@ TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
-  EXPECT_CALL(*storage, getBlocksFrom(1)).Times(0);
+  EXPECT_CALL(*storage, getBlocksFrom(_)).Times(0);
   auto block_variant = loader->retrieveBlock(peer_key, requested->hash());
 
   ASSERT_TRUE(block_variant);
@@ -252,8 +253,22 @@ TEST_F(BlockLoaderTest, ValidWhenBlockMissing) {
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
-  EXPECT_CALL(*storage, getBlocksFrom(1)).Times(0);
+  EXPECT_CALL(*storage, getBlocksFrom(_)).Times(0);
   auto block = loader->retrieveBlock(peer_key, kPrevHash);
 
   ASSERT_FALSE(block);
+}
+
+/**
+ * @given block loader @and empty consensus cache
+ * @when retrieveBlock is called with some hash
+ * @then nothing is returned @and block loader service does not ask storage
+ */
+TEST_F(BlockLoaderTest, ValidWithEmptyCache) {
+  EXPECT_CALL(*peer_query, getLedgerPeers())
+      .WillOnce(Return(std::vector<wPeer>{peer}));
+  EXPECT_CALL(*storage, getBlocksFrom(_)).Times(0);
+
+  auto emptiness = loader->retrieveBlock(peer_key, kPrevHash);
+  ASSERT_FALSE(emptiness);
 }

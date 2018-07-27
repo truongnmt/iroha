@@ -27,7 +27,7 @@ namespace iroha {
   namespace network {
     class BlockLoaderService : public proto::Loader::Service {
      public:
-      explicit BlockLoaderService(
+      BlockLoaderService(
           std::shared_ptr<ametsuchi::BlockQuery> storage,
           std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache);
 
