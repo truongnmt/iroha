@@ -43,15 +43,18 @@ namespace integration_framework {
    private:
     using ProposalType = std::shared_ptr<shared_model::interface::Proposal>;
     using BlockType = std::shared_ptr<shared_model::interface::Block>;
+    using StatusHandler =
+        std::function<void(const shared_model::interface::TransactionResponse &)>;
 
    public:
     /**
      * Construct test framework instance
      * @param maximum_proposal_size - Maximum number of transactions per
      * proposal
-     * @param destructor_lambda - (default nullptr) Pointer to function which
-     * receives pointer to constructed instance of Integration Test Framework.
-     * If specified, then will be called instead of default destructor's code
+     * @param destructor_lambda - (default nullptr) Pointer to function
+     * which receives pointer to constructed instance of Integration Test
+     * Framework. If specified, then will be called instead of default
+     * destructor's code
      * @param mst_support enables multisignature tx support
      * @param block_store_path specifies path where blocks will be stored
      */
@@ -110,15 +113,14 @@ namespace integration_framework {
     /**
      * Send transaction to Iroha and validate its status
      * @param tx - transaction for sending
-     * @param validation - callback for transaction status validation that
-     * receives object of type \relates shared_model::proto::TransactionResponse
-     * by reference
+     * @param validation - triggered on final transaction status
+     * @param onStatus - triggered on each status of transaction
      * @return this
      */
-    IntegrationTestFramework &sendTx(
-        const shared_model::proto::Transaction &tx,
-        std::function<void(const shared_model::proto::TransactionResponse &)>
-            validation);
+    IntegrationTestFramework &sendTx(const shared_model::proto::Transaction &tx,
+                                     StatusHandler validation,
+                                     StatusHandler onStatus = [](const auto &) {
+                                     });
 
     /**
      * Send transaction to Iroha without status validation

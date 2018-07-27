@@ -178,8 +178,8 @@ namespace integration_framework {
 
   IntegrationTestFramework &IntegrationTestFramework::sendTx(
       const shared_model::proto::Transaction &tx,
-      std::function<void(const shared_model::proto::TransactionResponse &)>
-          validation) {
+      StatusHandler validation,
+      StatusHandler onStatus) {
     log_->info("send transaction");
 
     // Required for StatusBus synchronization
@@ -189,7 +189,9 @@ namespace integration_framework {
         ->statuses()
         .filter([&](auto s) { return s->transactionHash() == tx.hash(); })
         .take(1)
-        .subscribe([&bar1, b2 = std::weak_ptr<boost::barrier>(bar2)](auto s) {
+        .subscribe([onStatus, &bar1, b2 = std::weak_ptr<boost::barrier>(bar2)](
+                       auto s) {
+          onStatus(*s);
           bar1.wait();
           if (auto lock = b2.lock()) {
             lock->wait();
@@ -203,7 +205,7 @@ namespace integration_framework {
     // fetch status of transaction
     shared_model::proto::TransactionResponse status = getTxStatus(tx.hash());
     // make sure that the following statuses (stateful/commited)
-    // isn't reached the bus yet
+    // did not reach the bus yet
     bar2->wait();
 
     // check validation function

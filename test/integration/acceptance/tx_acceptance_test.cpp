@@ -11,7 +11,8 @@ class AcceptanceTest : public AcceptanceFixture {
  public:
   const std::string kAdmin = "admin@test";
 
-  const std::function<void(const shared_model::proto::TransactionResponse &)>
+  const std::function<void(
+      const shared_model::interface::TransactionResponse &)>
       checkStatelessValid = [](auto &status) {
         ASSERT_NO_THROW(boost::apply_visitor(
             framework::SpecifiedVisitor<

@@ -16,9 +16,9 @@
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
 
 namespace shared_model {
-  namespace proto {
+  namespace interface {
     class TransactionResponse;
-  }  // namespace proto
+  }  // namespace interface
 }  // namespace shared_model
 
 /**
@@ -116,7 +116,8 @@ class AcceptanceFixture : public ::testing::Test {
   const shared_model::crypto::Keypair kAdminKeypair;
   const shared_model::crypto::Keypair kUserKeypair;
 
-  const std::function<void(const shared_model::proto::TransactionResponse &)>
+  const std::function<void(
+      const shared_model::interface::TransactionResponse &)>
       checkStatelessInvalid;
 
  private:
