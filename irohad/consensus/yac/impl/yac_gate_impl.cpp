@@ -41,12 +41,14 @@ namespace iroha {
           std::shared_ptr<YacHashProvider> hash_provider,
           std::shared_ptr<simulator::BlockCreator> block_creator,
           std::shared_ptr<network::BlockLoader> block_loader,
+          std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache,
           uint64_t delay)
           : hash_gate_(std::move(hash_gate)),
             orderer_(std::move(orderer)),
             hash_provider_(std::move(hash_provider)),
             block_creator_(std::move(block_creator)),
             block_loader_(std::move(block_loader)),
+            block_cache_(std::move(block_cache)),
             delay_(delay) {
         log_ = logger::log("YacGate");
         block_creator_->on_block().subscribe(
@@ -66,6 +68,9 @@ namespace iroha {
         }
         current_block_ = std::make_pair(hash, block);
         hash_gate_->vote(hash, *order);
+        // insert the block we voted for to the consensus cache
+        block_cache_->insert(
+            std::make_shared<shared_model::interface::BlockVariant>(block));
       }
 
       rxcpp::observable<shared_model::interface::BlockVariant>
