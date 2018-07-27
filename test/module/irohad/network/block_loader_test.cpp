@@ -19,9 +19,11 @@
 #include <grpc++/server.h>
 #include <grpc++/server_builder.h>
 #include <gtest/gtest.h>
+#include <framework/specified_visitor.hpp>
 
 #include "builders/common_objects/peer_builder.hpp"
 #include "builders/protobuf/common_objects/proto_peer_builder.hpp"
+#include "consensus/consensus_block_cache.hpp"
 #include "cryptography/crypto_provider/crypto_defaults.hpp"
 #include "cryptography/hash.hpp"
 #include "datetime/time.hpp"
@@ -48,7 +50,9 @@ class BlockLoaderTest : public testing::Test {
   void SetUp() override {
     peer_query = std::make_shared<MockPeerQuery>();
     storage = std::make_shared<MockBlockQuery>();
-    loader = std::make_shared<BlockLoaderImpl>(peer_query, storage);
+    block_cache = std::make_shared<iroha::consensus::ConsensusBlockCache>();
+    loader =
+        std::make_shared<BlockLoaderImpl>(peer_query, storage, block_cache);
     service = std::make_shared<BlockLoaderService>(storage);
 
     grpc::ServerBuilder builder;
@@ -98,6 +102,7 @@ class BlockLoaderTest : public testing::Test {
   std::shared_ptr<BlockLoaderImpl> loader;
   std::shared_ptr<BlockLoaderService> service;
   std::unique_ptr<grpc::Server> server;
+  std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache;
 };
 
 /**
@@ -215,10 +220,16 @@ TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
       .WillOnce(Return(std::vector<wPeer>{peer}));
   EXPECT_CALL(*storage, getBlocksFrom(1))
       .WillOnce(Return(rxcpp::observable<>::just(wBlock(clone(requested)))));
-  auto block = loader->retrieveBlock(peer_key, requested.hash());
+  auto block_variant = loader->retrieveBlock(peer_key, requested.hash());
 
-  ASSERT_TRUE(block);
-  ASSERT_EQ(**block, requested);
+  ASSERT_TRUE(block_variant);
+  ASSERT_NO_THROW({
+    auto unwrapped_block = boost::apply_visitor(
+        framework::SpecifiedVisitor<
+            std::shared_ptr<shared_model::interface::Block>>(),
+        *block_variant);
+    ASSERT_EQ(requested, *unwrapped_block);
+  });
 }
 
 /**

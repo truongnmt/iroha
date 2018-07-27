@@ -29,15 +29,15 @@ auto BlockLoaderInit::createService(std::shared_ptr<BlockQuery> storage) {
 auto BlockLoaderInit::createLoader(
     std::shared_ptr<PeerQuery> peer_query,
     std::shared_ptr<BlockQuery> storage,
-    std::shared_ptr<ConsensusCacheBlock> cache_block) {
-  return std::make_shared<BlockLoaderImpl>(peer_query, storage, cache_block);
+    std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache) {
+  return std::make_shared<BlockLoaderImpl>(peer_query, storage, block_cache);
 }
 
 std::shared_ptr<BlockLoader> BlockLoaderInit::initBlockLoader(
     std::shared_ptr<PeerQuery> peer_query,
     std::shared_ptr<BlockQuery> storage,
-    std::shared_ptr<ConsensusCacheBlock> cache_block) {
+    std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache) {
   service = createService(storage);
-  loader = createLoader(peer_query, storage, cache_block);
+  loader = createLoader(peer_query, storage, block_cache);
   return loader;
 }

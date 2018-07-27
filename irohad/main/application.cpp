@@ -181,8 +181,11 @@ void Irohad::initSimulator() {
   log_->info("[Init] => init simulator");
 }
 
+/**
+ * Initializing consensus block cache
+ */
 void Irohad::initConsensusCache() {
-  cache_block = std::make_shared<ConsensusCacheBlock>();
+  block_cache = std::make_shared<iroha::consensus::ConsensusBlockCache>();
 
   log_->info("[Init] => init consensus block cache");
 }
@@ -191,8 +194,8 @@ void Irohad::initConsensusCache() {
  * Initializing block loader
  */
 void Irohad::initBlockLoader() {
-  block_loader =
-      loader_init.initBlockLoader(initPeerQuery(), storage->getBlockQuery(), cache_block);
+  block_loader = loader_init.initBlockLoader(
+      initPeerQuery(), storage->getBlockQuery(), block_cache);
 
   log_->info("[Init] => block loader");
 }

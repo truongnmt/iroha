@@ -34,7 +34,7 @@ namespace val = shared_model::validation;
 BlockLoaderImpl::BlockLoaderImpl(
     std::shared_ptr<PeerQuery> peer_query,
     std::shared_ptr<BlockQuery> block_query,
-    std::shared_ptr<ConsensusCacheBlock> cache_block)
+    std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block)
     : peer_query_(std::move(peer_query)),
       block_query_(std::move(block_query)),
       cache_block_(std::move(cache_block)) {
@@ -119,8 +119,8 @@ rxcpp::observable<std::shared_ptr<Block>> BlockLoaderImpl::retrieveBlocks(
 
 boost::optional<BlockVariant> BlockLoaderImpl::retrieveBlock(
     const PublicKey &peer_pubkey, const types::HashType &block_hash) {
-  // first of all, check if required block is in consensus cache, if not, request
-  // it from ledger
+  // first of all, check if required block is in consensus cache, if not,
+  // request it from ledger
   auto block_from_cache = cache_block_->get();
   if (block_from_cache and block_from_cache->hash() == block_hash) {
     return boost::make_optional(*block_from_cache);

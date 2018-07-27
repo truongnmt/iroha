@@ -23,8 +23,8 @@
 #include <unordered_map>
 
 #include "ametsuchi/block_query.hpp"
-#include "ametsuchi/impl/consensus_cache_block.hpp"
 #include "ametsuchi/peer_query.hpp"
+#include "consensus/consensus_block_cache.hpp"
 #include "loader.grpc.pb.h"
 #include "logger/logger.hpp"
 #include "validators/default_validator.hpp"
@@ -33,16 +33,16 @@ namespace iroha {
   namespace network {
     class BlockLoaderImpl : public BlockLoader {
      public:
-      BlockLoaderImpl(std::shared_ptr<ametsuchi::PeerQuery> peer_query,
-                      std::shared_ptr<ametsuchi::BlockQuery> block_query,
-                      std::shared_ptr<ConsensusCacheBlock> cache_block);
+      BlockLoaderImpl(
+          std::shared_ptr<ametsuchi::PeerQuery> peer_query,
+          std::shared_ptr<ametsuchi::BlockQuery> block_query,
+          std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block);
 
       rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
       retrieveBlocks(
           const shared_model::crypto::PublicKey &peer_pubkey) override;
 
-      boost::optional<shared_model::interface::BlockVariant>
-      retrieveBlock(
+      boost::optional<shared_model::interface::BlockVariant> retrieveBlock(
           const shared_model::crypto::PublicKey &peer_pubkey,
           const shared_model::interface::types::HashType &block_hash) override;
 
@@ -71,7 +71,7 @@ namespace iroha {
 
       logger::Logger log_;
 
-      std::shared_ptr<ConsensusCacheBlock> cache_block_;
+      std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block_;
     };
   }  // namespace network
 }  // namespace iroha

@@ -21,6 +21,7 @@
 #include "ametsuchi/impl/peer_query_wsv.hpp"
 #include "ametsuchi/impl/storage_impl.hpp"
 #include "ametsuchi/ordering_service_persistent_state.hpp"
+#include "consensus/consensus_block_cache.hpp"
 #include "cryptography/crypto_provider/crypto_model_signer.hpp"
 #include "cryptography/keypair.hpp"
 #include "logger/logger.hpp"
@@ -176,7 +177,7 @@ class Irohad {
   std::shared_ptr<iroha::simulator::Simulator> simulator;
 
   // block cache for consensus and block loader
-  std::shared_ptr<ConsensusCacheBlock> cache_block;
+  std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache;
 
   // block loader
   std::shared_ptr<iroha::network::BlockLoader> block_loader;

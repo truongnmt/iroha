@@ -12,7 +12,7 @@ add_library(ametsuchi
     impl/postgres_ordering_service_persistent_state.cpp
     impl/wsv_restorer_impl.cpp
     impl/postgres_options.cpp
-    )
+        ../consensus/consensus_block_cache.hpp)
 
 target_link_libraries(ametsuchi
     logger
