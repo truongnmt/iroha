@@ -24,7 +24,6 @@
 
 #include "ametsuchi/block_query.hpp"
 #include "ametsuchi/peer_query.hpp"
-#include "consensus/consensus_block_cache.hpp"
 #include "loader.grpc.pb.h"
 #include "logger/logger.hpp"
 #include "validators/default_validator.hpp"
@@ -35,8 +34,7 @@ namespace iroha {
      public:
       BlockLoaderImpl(
           std::shared_ptr<ametsuchi::PeerQuery> peer_query,
-          std::shared_ptr<ametsuchi::BlockQuery> block_query,
-          std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block);
+          std::shared_ptr<ametsuchi::BlockQuery> block_query);
 
       rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
       retrieveBlocks(
@@ -70,8 +68,6 @@ namespace iroha {
       std::shared_ptr<ametsuchi::BlockQuery> block_query_;
 
       logger::Logger log_;
-
-      std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block_;
     };
   }  // namespace network
 }  // namespace iroha

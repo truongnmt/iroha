@@ -31,13 +31,9 @@ using namespace shared_model::crypto;
 using namespace shared_model::interface;
 namespace val = shared_model::validation;
 
-BlockLoaderImpl::BlockLoaderImpl(
-    std::shared_ptr<PeerQuery> peer_query,
-    std::shared_ptr<BlockQuery> block_query,
-    std::shared_ptr<iroha::consensus::ConsensusBlockCache> cache_block)
-    : peer_query_(std::move(peer_query)),
-      block_query_(std::move(block_query)),
-      cache_block_(std::move(cache_block)) {
+BlockLoaderImpl::BlockLoaderImpl(std::shared_ptr<PeerQuery> peer_query,
+                                 std::shared_ptr<BlockQuery> block_query)
+    : peer_query_(std::move(peer_query)), block_query_(std::move(block_query)) {
   log_ = logger::log("BlockLoaderImpl");
 }
 
@@ -119,13 +115,6 @@ rxcpp::observable<std::shared_ptr<Block>> BlockLoaderImpl::retrieveBlocks(
 
 boost::optional<BlockVariant> BlockLoaderImpl::retrieveBlock(
     const PublicKey &peer_pubkey, const types::HashType &block_hash) {
-  // first of all, check if required block is in consensus cache, if not,
-  // request it from ledger
-  auto block_from_cache = cache_block_->get();
-  if (block_from_cache and block_from_cache->hash() == block_hash) {
-    return boost::make_optional(*block_from_cache);
-  }
-
   auto peer = findPeer(peer_pubkey);
   if (not peer) {
     log_->error(kPeerNotFound);
@@ -154,7 +143,6 @@ boost::optional<BlockVariant> BlockLoaderImpl::retrieveBlock(
     return boost::none;
   }
 
-  BlockVariant bv{result};
   return boost::make_optional(BlockVariant{result});
 }
 

@@ -33,18 +33,19 @@ namespace iroha {
       /**
        * Create block loader service with given storage
        * @param storage - used to retrieve blocks
+       * @param block_cache - used to retrieve block put by consensus
        * @return initialized service
        */
-      auto createService(std::shared_ptr<ametsuchi::BlockQuery> storage);
+      auto createService(
+          std::shared_ptr<ametsuchi::BlockQuery> storage,
+          std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache);
 
       /**
        * Create block loader for loading blocks from given peer by top block
        * @return initialized loader
        */
-      auto createLoader(
-          std::shared_ptr<ametsuchi::PeerQuery> peer_query,
-          std::shared_ptr<ametsuchi::BlockQuery> storage,
-          std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache);
+      auto createLoader(std::shared_ptr<ametsuchi::PeerQuery> peer_query,
+                        std::shared_ptr<ametsuchi::BlockQuery> storage);
 
      public:
       /**
