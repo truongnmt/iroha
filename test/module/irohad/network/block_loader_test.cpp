@@ -220,15 +220,14 @@ TEST_F(BlockLoaderTest, ValidWhenMultipleBlocks) {
  */
 TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
   // Request existing block => success
-  auto requested =
-      getBaseBlockBuilder().build().signAndAddSignature(key).finish();
-  block_cache->insert(
-      wrapBlock(std::make_shared<shared_model::interface::Block>(requested)));
+  auto requested = std::make_shared<shared_model::proto::Block>(
+      getBaseBlockBuilder().build().signAndAddSignature(key).finish());
+  block_cache->insert(wrapBlock(requested));
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
   EXPECT_CALL(*storage, getBlocksFrom(1)).Times(0);
-  auto block_variant = loader->retrieveBlock(peer_key, requested.hash());
+  auto block_variant = loader->retrieveBlock(peer_key, requested->hash());
 
   ASSERT_TRUE(block_variant);
   ASSERT_NO_THROW({
@@ -236,7 +235,7 @@ TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
         framework::SpecifiedVisitor<
             std::shared_ptr<shared_model::interface::Block>>(),
         *block_variant);
-    ASSERT_EQ(requested, *unwrapped_block);
+    ASSERT_EQ(*requested, *unwrapped_block);
   });
 }
 
@@ -247,10 +246,9 @@ TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
  */
 TEST_F(BlockLoaderTest, ValidWhenBlockMissing) {
   // Request nonexisting block => failure
-  auto present =
-      getBaseBlockBuilder().build().signAndAddSignature(key).finish();
-  block_cache->insert(
-      wrapBlock(std::make_shared<shared_model::interface::Block>(present)));
+  auto present = std::make_shared<shared_model::proto::Block>(
+      getBaseBlockBuilder().build().signAndAddSignature(key).finish());
+  block_cache->insert(wrapBlock(present));
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
