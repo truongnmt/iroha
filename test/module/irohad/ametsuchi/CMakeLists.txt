@@ -69,12 +69,6 @@ target_link_libraries(postgres_executor_test
     libs_common
     )
 
-addtest(consensus_cache_test consensus_cache_test.cpp)
-target_link_libraries(consensus_cache_test
-    ametsuchi
-    shared_model_interfaces
-    )
-
 add_library(ametsuchi_fixture INTERFACE)
 target_link_libraries(ametsuchi_fixture INTERFACE
     integration_framework_config_helper
