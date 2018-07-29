@@ -29,6 +29,7 @@
 #include "module/irohad/consensus/yac/yac_mocks.hpp"
 #include "module/irohad/network/network_mocks.hpp"
 #include "module/irohad/simulator/simulator_mocks.hpp"
+#include "consensus/consensus_block_cache.hpp"
 
 using namespace iroha::consensus::yac;
 using namespace iroha::network;
@@ -36,6 +37,7 @@ using namespace iroha::simulator;
 using namespace framework::test_subscriber;
 using namespace shared_model::crypto;
 using namespace std;
+using iroha::consensus::ConsensusBlockCache;
 
 using ::testing::_;
 using ::testing::An;
@@ -80,6 +82,7 @@ class YacGateTest : public ::testing::Test {
     hash_provider = make_shared<MockYacHashProvider>();
     block_creator = make_shared<MockBlockCreator>();
     block_loader = make_shared<MockBlockLoader>();
+    block_cache = make_shared<ConsensusBlockCache>();
   }
 
   void init() {
@@ -88,6 +91,7 @@ class YacGateTest : public ::testing::Test {
                                          hash_provider,
                                          block_creator,
                                          block_loader,
+                                         block_cache,
                                          delay);
   }
 
@@ -102,6 +106,7 @@ class YacGateTest : public ::testing::Test {
   shared_ptr<MockYacHashProvider> hash_provider;
   shared_ptr<MockBlockCreator> block_creator;
   shared_ptr<MockBlockLoader> block_loader;
+  shared_ptr<ConsensusBlockCache> block_cache;
   uint64_t delay = 0;
 
   shared_ptr<YacGateImpl> gate;

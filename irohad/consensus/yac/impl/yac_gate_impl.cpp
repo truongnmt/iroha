@@ -47,7 +47,7 @@ namespace iroha {
             hash_provider_(std::move(hash_provider)),
             block_creator_(std::move(block_creator)),
             block_loader_(std::move(block_loader)),
-            block_cache_(std::move(block_cache)),
+            consensus_result_cache_(std::move(block_cache)),
             delay_(delay) {
         log_ = logger::log("YacGate");
         block_creator_->on_block().subscribe(
@@ -69,7 +69,7 @@ namespace iroha {
         hash_gate_->vote(hash, *order);
 
         // insert the block we voted for to the consensus cache
-        consensus_result_cache->insert(
+        consensus_result_cache_->insert(
             std::make_shared<shared_model::interface::BlockVariant>(block));
       }
 
@@ -114,6 +114,11 @@ namespace iroha {
                         // if load is successful
                         if (block) {
                           subscriber.on_next(*block);
+                          // update the cache
+                          consensus_result_cache_->insert(
+                              std::make_shared<
+                                  shared_model::interface::BlockVariant>(
+                                  *block));
                         }
                         subscriber.on_completed();
                       });

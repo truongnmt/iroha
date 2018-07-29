@@ -75,7 +75,7 @@ namespace iroha {
         std::shared_ptr<network::BlockLoader> block_loader_;
 
         std::shared_ptr<iroha::consensus::ConsensusBlockCache>
-            consensus_result_cache;
+            consensus_result_cache_;
 
         const uint64_t delay_;
 
