@@ -18,7 +18,6 @@
 #include "consensus/yac/impl/yac_gate_impl.hpp"
 
 #include "backend/protobuf/block.hpp"
-#include "backend/protobuf/empty_block.hpp"
 #include "builders/protobuf/common_objects/proto_signature_builder.hpp"
 #include "common/visitor.hpp"
 #include "consensus/yac/cluster_order.hpp"
@@ -106,32 +105,18 @@ namespace iroha {
                 .delay(std::chrono::milliseconds(delay_))
                 .flat_map([this, model_hash](auto vote) {
                   // map vote to block if it can be loaded
-                  return rxcpp::observable<>::create<std::shared_ptr<
-                      shared_model::interface::Block>>([this, model_hash, vote](
-                                                           auto subscriber) {
-                    auto block = block_loader_->retrieveBlock(
-                        vote.signature->publicKey(),
-                        shared_model::crypto::Hash(model_hash));
-                    // if load is successful
-                    if (block) {
-                      iroha::visit_in_place(
-                          *block,
-                          [&subscriber](
-                              std::shared_ptr<shared_model::interface::Block>
-                                  block) { subscriber.on_next(block); },
-                          [&subscriber](std::shared_ptr<
-                                        shared_model::interface::EmptyBlock>
-                                            empty_block) {
-                            subscriber.on_next(
-                                std::make_shared<shared_model::proto::Block>(
-                                    std::static_pointer_cast<
-                                        shared_model::proto::EmptyBlock>(
-                                        empty_block)
-                                        ->getTransport()));
-                          });
-                    }
-                    subscriber.on_completed();
-                  });
+                  return rxcpp::observable<>::create<
+                      shared_model::interface::BlockVariant>(
+                      [this, model_hash, vote](auto subscriber) {
+                        auto block = block_loader_->retrieveBlock(
+                            vote.signature->publicKey(),
+                            shared_model::crypto::Hash(model_hash));
+                        // if load is successful
+                        if (block) {
+                          subscriber.on_next(*block);
+                        }
+                        subscriber.on_completed();
+                      });
                 })
                 // need only the first
                 .first()
