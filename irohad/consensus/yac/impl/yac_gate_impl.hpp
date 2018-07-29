@@ -73,7 +73,9 @@ namespace iroha {
         std::shared_ptr<YacHashProvider> hash_provider_;
         std::shared_ptr<simulator::BlockCreator> block_creator_;
         std::shared_ptr<network::BlockLoader> block_loader_;
-        std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache_;
+
+        std::shared_ptr<iroha::consensus::ConsensusBlockCache>
+            consensus_result_cache;
 
         const uint64_t delay_;
 

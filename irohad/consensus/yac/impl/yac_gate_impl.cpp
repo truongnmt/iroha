@@ -68,8 +68,9 @@ namespace iroha {
         }
         current_block_ = std::make_pair(hash, block);
         hash_gate_->vote(hash, *order);
+
         // insert the block we voted for to the consensus cache
-        block_cache_->insert(
+        consensus_result_cache->insert(
             std::make_shared<shared_model::interface::BlockVariant>(block));
       }
 
