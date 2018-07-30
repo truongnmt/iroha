@@ -52,7 +52,7 @@ RUN git clone git://github.com/yyuu/pyenv.git .pyenv
 ENV HOME  /home/iroha-ci
 ENV PYENV_ROOT $HOME/.pyenv
 ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
-ENV PYTHON_CONFIGURE_OPTS "--enable-shared"
+# ENV PYTHON_CONFIGURE_OPTS "--enable-shared"
 RUN set -e; \
     pyenv install 2.7.15; \
     pyenv install 3.5.5; \
