@@ -33,8 +33,8 @@ namespace iroha {
         std::shared_ptr<network::BlockLoader> blockLoader)
         : validator_(std::move(validator)),
           mutableFactory_(std::move(mutableFactory)),
-          blockLoader_(std::move(blockLoader)) {
-      log_ = logger::log("synchronizer");
+          blockLoader_(std::move(blockLoader)),
+          log_(logger::log("synchronizer")) {
       consensus_gate->on_commit().subscribe(
           subscription_,
           [&](const shared_model::interface::BlockVariant &block_variant) {
@@ -47,76 +47,82 @@ namespace iroha {
     }
 
     void SynchronizerImpl::process_commit(
-        const shared_model::interface::BlockVariant &commit_message_variant) {
+        const shared_model::interface::BlockVariant &committed_block_variant) {
       log_->info("processing commit");
-      auto storageResult = mutableFactory_->createMutableStorage();
-      std::unique_ptr<ametsuchi::MutableStorage> storage;
-      storageResult.match(
-          [&](expected::Value<std::unique_ptr<ametsuchi::MutableStorage>>
-                  &_storage) { storage = std::move(_storage.value); },
-          [&](expected::Error<std::string> &error) {
-            storage = nullptr;
-            log_->error(error.error);
-          });
+      auto storage = createTemporaryStorage();
       if (not storage) {
         return;
       }
 
-      // TODO kamilsa 4.06.2018 IR-1300. Remove this conversion from variant to
-      // block, when synchronizer is able to process block variants
-      auto commit_message = iroha::visit_in_place(
-          commit_message_variant,
-          [](std::shared_ptr<shared_model::interface::EmptyBlock> empty_block)
-              -> std::shared_ptr<shared_model::interface::Block> {
-            auto proto_empty_block =
-                std::static_pointer_cast<shared_model::proto::EmptyBlock>(
-                    empty_block);
-            return std::make_shared<shared_model::proto::Block>(
-                proto_empty_block->getTransport());
-          },
-          [](auto block) { return block; });
+      if (validator_->validateBlock(committed_block_variant, *storage)) {
+        // block can be applied to current storage; do it and commit the result
+        // to main ametsuchi, if it's not an empty block
+        iroha::visit_in_place(
+            committed_block_variant,
+            [this, storage = std::move(storage)](
+                std::shared_ptr<shared_model::interface::Block>
+                    block_ptr) mutable {
+              // we do not need a predicate, as we have already checked
+              // applicability of the block
+              storage->apply(
+                  *block_ptr,
+                  [](const auto &, auto &, const auto &) { return true; });
+              mutableFactory_->commit(std::move(storage));
 
-      if (validator_->validateBlock(*commit_message, *storage)) {
-        // Block can be applied to current storage
-        // Commit to main Ametsuchi
-        mutableFactory_->commit(std::move(storage));
-
-        auto single_commit = rxcpp::observable<>::just(commit_message);
-
-        notifier_.get_subscriber().on_next(single_commit);
+              notifier_.get_subscriber().on_next(
+                  rxcpp::observable<>::just(block_ptr));
+            },
+            [this](std::shared_ptr<shared_model::interface::EmptyBlock>
+                       empty_block_ptr) {
+              // we have an empty block, so don't apply it, just notify the
+              // subscriber
+              notifier_.get_subscriber().on_next(
+                  rxcpp::observable<>::just(empty_block_ptr));
+            });
       } else {
-        // Block can't be applied to current storage
-        // Download all missing blocks
-        for (const auto &signature : commit_message->signatures()) {
-          auto storageResult = mutableFactory_->createMutableStorage();
-          std::unique_ptr<ametsuchi::MutableStorage> storage;
-          storageResult.match(
-              [&](expected::Value<std::unique_ptr<ametsuchi::MutableStorage>>
-                      &_storage) { storage = std::move(_storage.value); },
-              [&](expected::Error<std::string> &error) {
-                storage = nullptr;
-                log_->error(error.error);
-              });
+        // block can't be applied to current storage
+        // download all missing blocks
+        for (const auto &signature : committed_block_variant.signatures()) {
+          storage = createTemporaryStorage();
           if (not storage) {
             return;
           }
+
           auto network_chain = blockLoader_->retrieveBlocks(
               shared_model::crypto::PublicKey(signature.publicKey()));
-          // Check chain last commit
           std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
           network_chain.as_blocking().subscribe(
               [&blocks](auto block) { blocks.push_back(block); });
-          auto is_chain_end_expected =
-              blocks.back()->hash() == commit_message->hash();
+          auto chain_ends_with_right_block =
+              blocks.back()->hash() == committed_block_variant.prevHash();
           auto chain =
               rxcpp::observable<>::iterate(blocks, rxcpp::identity_immediate());
 
           if (validator_->validateChain(chain, *storage)
-              and is_chain_end_expected) {
-            // Peer send valid chain
-            mutableFactory_->commit(std::move(storage));
+              and chain_ends_with_right_block) {
+            // peer sent valid chain; apply our last block, if it's not empty,
+            // and commit it to ametsuchi
             notifier_.get_subscriber().on_next(chain);
-            // You are synchronized
+
+            storage = iroha::visit_in_place(
+                committed_block_variant,
+                [this, storage = std::move(storage), chain = std::move(chain)](
+                    std::shared_ptr<shared_model::interface::Block>
+                        block_ptr) mutable {
+                  // if last block is not empty, update storage and notifier
+                  // with it
+                  notifier_.get_subscriber().on_next(
+                      rxcpp::observable<>::just(block_ptr));
+                  storage->apply(
+                      *block_ptr,
+                      [](const auto &, auto &, const auto &) { return true; });
+                  return std::move(storage);
+                },
+                [storage = std::move(storage)]() mutable {
+                  return std::move(storage);
+                });
+            mutableFactory_->commit(std::move(storage));
+            // we are synchronized
             return;
           }
         }
@@ -126,5 +132,17 @@ namespace iroha {
     rxcpp::observable<Commit> SynchronizerImpl::on_commit_chain() {
       return notifier_.get_observable();
     }
+
+    std::unique_ptr<ametsuchi::MutableStorage>
+    SynchronizerImpl::createTemporaryStorage() const {
+      return mutableFactory_->createMutableStorage().match(
+          [](expected::Value<std::unique_ptr<ametsuchi::MutableStorage>>
+                 &created_storage) { return std::move(created_storage.value); },
+          [this](expected::Error<std::string> &error) {
+            log_->error("could not create mutable storage: {}", error.error);
+            return nullptr;
+          });
+    }
+
   }  // namespace synchronizer
 }  // namespace iroha

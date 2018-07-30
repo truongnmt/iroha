@@ -41,8 +41,9 @@ namespace iroha {
               blocks,
           ametsuchi::MutableStorage &storage) override;
 
-      bool validateBlock(const shared_model::interface::Block &block,
-                         ametsuchi::MutableStorage &storage) override;
+      bool validateBlock(
+          const shared_model::interface::BlockVariant &block_variant,
+          ametsuchi::MutableStorage &storage) override;
 
      private:
       /**

@@ -37,7 +37,7 @@ namespace iroha {
       ~SynchronizerImpl();
 
       void process_commit(
-          const shared_model::interface::BlockVariant &commit_message) override;
+          const shared_model::interface::BlockVariant &committed_block_variant) override;
 
       rxcpp::observable<Commit> on_commit_chain() override;
 
@@ -51,6 +51,12 @@ namespace iroha {
       rxcpp::composite_subscription subscription_;
 
       logger::Logger log_;
+
+      /**
+       * Creates a temporary storage out of this object's factory
+       * @return pointer to created storage
+       */
+      std::unique_ptr<ametsuchi::MutableStorage> createTemporaryStorage() const;
     };
   }  // namespace synchronizer
 }  // namespace iroha

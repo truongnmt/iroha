@@ -20,6 +20,7 @@
 #include "ametsuchi/mutable_storage.hpp"
 #include "ametsuchi/wsv_query.hpp"
 #include "consensus/yac/supermajority_checker.hpp"
+#include "interfaces/iroha_internal/block_variant.hpp"
 
 namespace iroha {
   namespace validation {
@@ -31,24 +32,26 @@ namespace iroha {
     }
 
     bool ChainValidatorImpl::validateBlock(
-        const shared_model::interface::Block &block,
+        const shared_model::interface::BlockVariant &block_variant,
         ametsuchi::MutableStorage &storage) {
       log_->info("validate block: height {}, hash {}",
-                 block.height(),
-                 block.hash().hex());
+                 block_variant.height(),
+                 block_variant.hash().hex());
       auto apply_block =
-          [this](const auto &block, auto &queries, const auto &top_hash) {
+          [this](const shared_model::interface::BlockVariant &block_var,
+                 auto &queries,
+                 const auto &top_hash) {
             auto peers = queries.getPeers();
             if (not peers) {
               return false;
             }
-            return block.prevHash() == top_hash
-                and supermajority_checker_->hasSupermajority(block.signatures(),
-                                                             peers.value());
+            return block_var.prevHash() == top_hash
+                and supermajority_checker_->hasSupermajority(
+                        block_var.signatures(), peers.value());
           };
 
       // Apply to temporary storage
-      return storage.apply(block, apply_block);
+      return storage.check(block_variant, apply_block);
     }
 
     bool ChainValidatorImpl::validateChain(
