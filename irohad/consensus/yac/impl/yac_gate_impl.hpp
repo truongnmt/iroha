@@ -50,7 +50,7 @@ namespace iroha {
             std::shared_ptr<YacHashProvider> hash_provider,
             std::shared_ptr<simulator::BlockCreator> block_creator,
             std::shared_ptr<network::BlockLoader> block_loader,
-            std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache,
+            std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache,
             uint64_t delay);
         void vote(const shared_model::interface::BlockVariant &) override;
         /**
@@ -74,7 +74,7 @@ namespace iroha {
         std::shared_ptr<simulator::BlockCreator> block_creator_;
         std::shared_ptr<network::BlockLoader> block_loader_;
 
-        std::shared_ptr<iroha::consensus::ConsensusBlockCache>
+        std::shared_ptr<iroha::consensus::ConsensusResultCache>
             consensus_result_cache_;
 
         const uint64_t delay_;

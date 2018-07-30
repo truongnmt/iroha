@@ -25,7 +25,7 @@ using namespace iroha::network;
 
 BlockLoaderService::BlockLoaderService(
     std::shared_ptr<BlockQuery> storage,
-    std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache)
+    std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache)
     : storage_(std::move(storage)),
       block_cache_(std::move(block_cache)),
       log_(logger::log("BlockLoaderService")) {}

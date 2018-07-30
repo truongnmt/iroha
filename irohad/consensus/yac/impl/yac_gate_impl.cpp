@@ -40,7 +40,7 @@ namespace iroha {
           std::shared_ptr<YacHashProvider> hash_provider,
           std::shared_ptr<simulator::BlockCreator> block_creator,
           std::shared_ptr<network::BlockLoader> block_loader,
-          std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache,
+          std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache,
           uint64_t delay)
           : hash_gate_(std::move(hash_gate)),
             orderer_(std::move(orderer)),
@@ -48,8 +48,8 @@ namespace iroha {
             block_creator_(std::move(block_creator)),
             block_loader_(std::move(block_loader)),
             consensus_result_cache_(std::move(block_cache)),
-            delay_(delay) {
-        log_ = logger::log("YacGate");
+            delay_(delay),
+            log_(logger::log("YacGate")) {
         block_creator_->on_block().subscribe(
             [this](const auto &block) { this->vote(block); });
       }
@@ -70,7 +70,7 @@ namespace iroha {
 
         // insert the block we voted for to the consensus cache
         consensus_result_cache_->insert(
-            std::make_shared<shared_model::interface::BlockVariant>(block));
+            std::make_shared<ConsensusResult>(block));
       }
 
       rxcpp::observable<shared_model::interface::BlockVariant>
@@ -114,11 +114,9 @@ namespace iroha {
                         // if load is successful
                         if (block) {
                           subscriber.on_next(*block);
-                          // update the cache
+                          // update the cache with block consensus voted for
                           consensus_result_cache_->insert(
-                              std::make_shared<
-                                  shared_model::interface::BlockVariant>(
-                                  *block));
+                              std::make_shared<ConsensusResult>(*block));
                         }
                         subscriber.on_completed();
                       });
