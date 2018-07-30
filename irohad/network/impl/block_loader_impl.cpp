@@ -67,7 +67,7 @@ rxcpp::observable<std::shared_ptr<Block>> BlockLoaderImpl::retrieveBlocks(
             expected::Value<std::shared_ptr<shared_model::interface::Block>>
                 block) { top_block = block.value; },
         [this](expected::Error<std::string> error) {
-          log_->error(kTopBlockRetrieveFail + std::string{": "} + error.error);
+          log_->error("{}: {}", kTopBlockRetrieveFail, error.error);
         });
     if (not top_block) {
       subscriber.on_completed();
