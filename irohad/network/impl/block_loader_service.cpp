@@ -73,7 +73,7 @@ grpc::Status BlockLoaderService::retrieveBlock(
         return std::static_pointer_cast<shared_model::proto::Block>(block)
             ->getTransport();
       },
-      [](auto empty_block) {
+      [](std::shared_ptr<shared_model::interface::EmptyBlock> empty_block) {
         return std::static_pointer_cast<shared_model::proto::EmptyBlock>(
                    empty_block)
             ->getTransport();
