@@ -65,7 +65,7 @@ def doPythonBindings(os, buildType=Release) {
   if (os == 'linux') {
     cmakeOptions = """ \\
       -DPYTHON_INCLUDE_DIR=/home/iroha-ci/.pyenv/versions/3.5.5/include/python3.5m/ \\
-      -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.so \\
+      -DPYTHON_LIBRARY=/home/iroha-ci/.pyenv/versions/3.5.5/lib/libpython3.5m.a \\
       -DPYTHON_EXECUTABLE=/home/iroha-ci/.pyenv/versions/3.5.5/bin/python3.5 \\
     """
 

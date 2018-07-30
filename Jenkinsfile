@@ -396,7 +396,7 @@ pipeline {
         expression { return params.bindings }
       }
       parallel {
-        stage('bindings') {
+        stage('Linux bindings') {
           when {
             beforeAgent true
             expression { return params.x86_64_linux }

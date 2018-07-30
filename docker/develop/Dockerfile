@@ -49,7 +49,7 @@ USER iroha-ci
 
 RUN git clone git://github.com/yyuu/pyenv.git .pyenv
 
-ENV HOME  /home/iroha-ci
+ENV HOME /home/iroha-ci
 ENV PYENV_ROOT $HOME/.pyenv
 ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
 # ENV PYTHON_CONFIGURE_OPTS "--enable-shared"
