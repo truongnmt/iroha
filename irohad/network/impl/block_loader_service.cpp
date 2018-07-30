@@ -69,11 +69,11 @@ grpc::Status BlockLoaderService::retrieveBlock(
 
   auto transport_block = iroha::visit_in_place(
       *block_variant,
-      [](auto block) {
+      [](std::shared_ptr<shared_model::interface::Block> block) {
         return std::static_pointer_cast<shared_model::proto::Block>(block)
             ->getTransport();
       },
-      [](std::shared_ptr<shared_model::interface::EmptyBlock> empty_block) {
+      [](auto empty_block) {
         return std::static_pointer_cast<shared_model::proto::EmptyBlock>(
                    empty_block)
             ->getTransport();
