@@ -33,7 +33,7 @@ namespace iroha {
         std::shared_ptr<network::BlockLoader> blockLoader)
         : validator_(std::move(validator)),
           mutableFactory_(std::move(mutableFactory)),
-          blockLoader_(std::move(blockLoader)),
+          block_loader_(std::move(blockLoader)),
           log_(logger::log("synchronizer")) {
       consensus_gate->on_commit().subscribe(
           subscription_,
@@ -47,52 +47,99 @@ namespace iroha {
     }
 
     namespace {
+      /**
+       * Lambda always returning true specially for applying blocks to storage
+       */
       auto trueStorageApplyPredicate = [](const auto &, auto &, const auto &) {
         return true;
       };
-    }
 
-    void SynchronizerImpl::process_commit(
-        const shared_model::interface::BlockVariant &committed_block_variant) {
-      log_->info("processing commit");
-      auto storage = createTemporaryStorage();
-      if (not storage) {
-        return;
+      /**
+       * Creates a temporary storage out of the provided factory
+       * @param mutable_factory to create storage
+       * @param log to tell about errors
+       * @return pointer to created storage
+       */
+      std::unique_ptr<ametsuchi::MutableStorage> createTemporaryStorage(
+          std::shared_ptr<ametsuchi::MutableFactory> mutable_factory,
+          logger::Logger log) {
+        return mutable_factory->createMutableStorage().match(
+            [](expected::Value<std::unique_ptr<ametsuchi::MutableStorage>>
+                   &created_storage) {
+              return std::move(created_storage.value);
+            },
+            [&log](expected::Error<std::string> &error) {
+              log->error("could not create mutable storage: {}", error.error);
+              return std::unique_ptr<ametsuchi::MutableStorage>{};
+            });
       }
-      const auto committed_block_is_empty =
-          committed_block_variant.containsEmptyBlock();
 
-      if (validator_->validateBlock(committed_block_variant,
-                                    *storage)) {
+      /**
+       * Process block, which can be applied to current storage directly:
+       *   - apply non-empty block and commit result to Ametsuchi
+       *     @or
+       *   - don't apply empty block
+       * In both cases notify the subscriber about commit
+       * @param committed_block_variant to be applied
+       * @param notifier to notify the pcs about commit
+       * @param mutable_factory to create storage for block application
+       * @param log to tell about errors
+       */
+      void processApplicableBlock(
+          const shared_model::interface::BlockVariant &committed_block_variant,
+          const rxcpp::subjects::subject<Commit> &notifier,
+          std::shared_ptr<ametsuchi::MutableFactory> mutable_factory,
+          logger::Logger log) {
         // block can be applied to current storage; do it and commit the result
         // to main ametsuchi, if it's not an empty block
         iroha::visit_in_place(
             committed_block_variant,
-            [this](std::shared_ptr<shared_model::interface::Block>
-                       block_ptr) mutable {
-              notifier_.get_subscriber().on_next(
+            [&](std::shared_ptr<shared_model::interface::Block>
+                    block_ptr) mutable {
+              notifier.get_subscriber().on_next(
                   rxcpp::observable<>::just(block_ptr));
               // we do not need a predicate, as we have already checked
               // applicability of the block
-              auto applyStorage = createTemporaryStorage();
+              auto applyStorage = createTemporaryStorage(mutable_factory, log);
               applyStorage->apply(*block_ptr, trueStorageApplyPredicate);
-              mutableFactory_->commit(std::move(applyStorage));
+              mutable_factory->commit(std::move(applyStorage));
             },
-            [this](std::shared_ptr<shared_model::interface::EmptyBlock>
-                       empty_block_ptr) {
+            [&](std::shared_ptr<shared_model::interface::EmptyBlock>
+                    empty_block_ptr) {
               // we have an empty block, so don't apply it, just notify the
               // subscriber
-              notifier_.get_subscriber().on_next(Commit());
+              notifier.get_subscriber().on_next(Commit());
             });
-      } else {
-        // block can't be applied to current storage
-        // download all missing blocks and don't stop, even if all peers cannot
-        // provide them from the first (or any other) time
+      }
+
+      /**
+       * Process block, which cannot be applied to current storage directly:
+       *   - try to download missing blocks from other peers (don't stop, if
+       *     they cannot provide blocks at that moment)
+       *   - apply the chain on top of existing storage and commit result
+       * Committed block variant is not applied, because it's either empty or
+       * already exists in downloaded chain
+       * @param committed_block_variant to be processed
+       * @param notifier to notify the pcs about commit
+       * @param mutable_factory to commit results
+       * @param storage to validate and apply chain
+       * @param block_loader to download the blocks
+       * @param validator to validate chain
+       */
+      void processUnapplicableBlock(
+          const shared_model::interface::BlockVariant &committed_block_variant,
+          const rxcpp::subjects::subject<Commit> &notifier,
+          std::shared_ptr<ametsuchi::MutableFactory> mutable_factory,
+          std::unique_ptr<ametsuchi::MutableStorage> storage,
+          std::shared_ptr<network::BlockLoader> block_loader,
+          std::shared_ptr<validation::ChainValidator> validator) {
+        const auto committed_block_is_empty =
+            committed_block_variant.containsEmptyBlock();
         auto sync_complete = false;
         while (not sync_complete) {
           for (const auto &signature : committed_block_variant.signatures()) {
             std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
-            blockLoader_
+            block_loader
                 ->retrieveBlocks(
                     shared_model::crypto::PublicKey(signature.publicKey()))
                 .as_blocking()
@@ -105,17 +152,15 @@ namespace iroha {
                 ? blocks.back()->hash() == committed_block_variant.prevHash()
                 : blocks.back()->hash() == committed_block_variant.hash();
 
-            if (validator_->validateChain(chain, *storage)
+            if (validator->validateChain(chain, *storage)
                 and chain_ends_with_right_block) {
               // peer sent valid chain
-              notifier_.get_subscriber().on_next(chain);
+              notifier.get_subscriber().on_next(chain);
 
-              // apply chain to storage and commit result; no need to apply
-              // committed block, as it is either empty or already in the chain
               for (const auto &block : blocks) {
                 storage->apply(*block, trueStorageApplyPredicate);
               }
-              mutableFactory_->commit(std::move(storage));
+              mutable_factory->commit(std::move(storage));
 
               // we are finished
               sync_complete = true;
@@ -123,21 +168,31 @@ namespace iroha {
           }
         }
       }
+    }  // namespace
+
+    void SynchronizerImpl::process_commit(
+        const shared_model::interface::BlockVariant &committed_block_variant) {
+      log_->info("processing commit");
+      auto storage = createTemporaryStorage(mutableFactory_, log_);
+      if (not storage) {
+        return;
+      }
+
+      if (validator_->validateBlock(committed_block_variant, *storage)) {
+        processApplicableBlock(
+            committed_block_variant, notifier_, mutableFactory_, log_);
+      } else {
+        processUnapplicableBlock(committed_block_variant,
+                                 notifier_,
+                                 mutableFactory_,
+                                 std::move(storage),
+                                 block_loader_,
+                                 validator_);
+      }
     }
 
     rxcpp::observable<Commit> SynchronizerImpl::on_commit_chain() {
       return notifier_.get_observable();
-    }
-
-    std::unique_ptr<ametsuchi::MutableStorage>
-    SynchronizerImpl::createTemporaryStorage() const {
-      return mutableFactory_->createMutableStorage().match(
-          [](expected::Value<std::unique_ptr<ametsuchi::MutableStorage>>
-                 &created_storage) { return std::move(created_storage.value); },
-          [this](expected::Error<std::string> &error) {
-            log_->error("could not create mutable storage: {}", error.error);
-            return std::unique_ptr<ametsuchi::MutableStorage>{};
-          });
     }
 
   }  // namespace synchronizer

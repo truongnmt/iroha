@@ -44,7 +44,7 @@ namespace iroha {
      private:
       std::shared_ptr<validation::ChainValidator> validator_;
       std::shared_ptr<ametsuchi::MutableFactory> mutableFactory_;
-      std::shared_ptr<network::BlockLoader> blockLoader_;
+      std::shared_ptr<network::BlockLoader> block_loader_;
 
       // internal
       rxcpp::subjects::subject<Commit> notifier_;
@@ -52,11 +52,6 @@ namespace iroha {
 
       logger::Logger log_;
 
-      /**
-       * Creates a temporary storage out of this object's factory
-       * @return pointer to created storage
-       */
-      std::unique_ptr<ametsuchi::MutableStorage> createTemporaryStorage() const;
     };
   }  // namespace synchronizer
 }  // namespace iroha
