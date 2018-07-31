@@ -16,12 +16,12 @@
  */
 
 #include <gmock/gmock.h>
-#include <framework/specified_visitor.hpp>
 
 #include "backend/protobuf/block.hpp"
 #include "backend/protobuf/empty_block.hpp"
 #include "builders/protobuf/block.hpp"
 #include "builders/protobuf/empty_block.hpp"
+#include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
 #include "module/irohad/network/network_mocks.hpp"
