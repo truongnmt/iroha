@@ -18,6 +18,7 @@
 #include <gmock/gmock.h>
 
 #include "backend/protobuf/block.hpp"
+#include "backend/protobuf/empty_block.hpp"
 #include "builders/protobuf/block.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
@@ -71,12 +72,14 @@ class SynchronizerTest : public ::testing::Test {
         consensus_gate, chain_validator, mutable_factory, block_loader);
   }
 
-  std::shared_ptr<shared_model::interface::Block> makeCommit(
+  template <typename InterfaceBlockType = shared_model::interface::Block,
+            typename ProtoBlockType = shared_model::proto::Block>
+  std::shared_ptr<InterfaceBlockType> makeCommit(
       size_t time = iroha::time::now()) const {
     using TestUnsignedBlockBuilder = shared_model::proto::TemplateBlockBuilder<
         (1 << shared_model::proto::TemplateBlockBuilder<>::total) - 1,
         shared_model::validation::AlwaysValidValidator,
-        shared_model::proto::UnsignedWrapper<shared_model::proto::Block>>;
+        shared_model::proto::UnsignedWrapper<ProtoBlockType>>;
     auto block = TestUnsignedBlockBuilder()
                      .height(5)
                      .createdTime(time)
@@ -85,7 +88,7 @@ class SynchronizerTest : public ::testing::Test {
                          shared_model::crypto::DefaultCryptoAlgorithmType::
                              generateKeypair())
                      .finish();
-    return std::make_shared<shared_model::proto::Block>(std::move(block));
+    return std::make_shared<ProtoBlockType>(std::move(block));
   }
 
   std::shared_ptr<MockChainValidator> chain_validator;
@@ -302,5 +305,93 @@ TEST_F(SynchronizerTest, OnlyOneRetrieval) {
       make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 1);
   wrapper.subscribe();
   synchronizer->process_commit(commit_message);
+  ASSERT_TRUE(wrapper.validate());
+}
+
+/**
+ * @given commit from the consensus and initialized components
+ * @when commit consists of valid empty block
+ * @then empty block is not committed to the ledger
+ */
+TEST_F(SynchronizerTest, EmptyBlockNotCommitted) {
+  auto commit_message = makeCommit<shared_model::interface::EmptyBlock,
+                                   shared_model::proto::EmptyBlock>();
+
+  DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
+      SetFactory(&createMockMutableStorage);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
+
+  EXPECT_CALL(*mutable_factory, commit_(_)).Times(0);
+
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
+      .WillOnce(Return(true));
+
+  //  EXPECT_CALL(*consensus_gate, on_commit())
+  //      .WillOnce(Return(
+  //          rxcpp::observable<>::empty<shared_model::interface::BlockVariant>()));
+
+  init();
+
+  auto wrapper =
+      make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 1);
+  wrapper.subscribe([commit_message](auto commit) {
+    auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
+    block_wrapper.subscribe([commit_message](auto block) {
+      // Check commit block
+      ASSERT_EQ(block->height(), commit_message->height());
+    });
+    ASSERT_TRUE(block_wrapper.validate());
+  });
+
+  synchronizer->process_commit(commit_message);
+
+  ASSERT_TRUE(wrapper.validate());
+}
+
+/**
+ * @given commit from the consensus and initialized components
+ * @when synchronizer fails to download block from some peer
+ * @then it will try until success
+ */
+TEST_F(SynchronizerTest, RetrieveBlockTwoFailures) {
+  auto commit_message = makeCommit();
+
+  DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
+      SetFactory(&createMockMutableStorage);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
+
+  EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
+
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
+      .WillOnce(Return(false));
+
+  EXPECT_CALL(*block_loader, retrieveBlocks(_))
+      .WillRepeatedly(Return(rxcpp::observable<>::just(commit_message)));
+
+  // fail the chain validation two times so that synchronizer will try more
+  EXPECT_CALL(*chain_validator, validateChain(_, _))
+      .WillOnce(Return(false))
+      .WillOnce(Return(false))
+      .WillOnce(Return(true));
+
+  EXPECT_CALL(*consensus_gate, on_commit())
+      .WillOnce(Return(
+          rxcpp::observable<>::empty<shared_model::interface::BlockVariant>()));
+
+  init();
+
+  auto wrapper =
+      make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 1);
+  wrapper.subscribe([commit_message](auto commit) {
+    auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
+    block_wrapper.subscribe([commit_message](auto block) {
+      // Check commit block
+      ASSERT_EQ(block->height(), commit_message->height());
+    });
+    ASSERT_TRUE(block_wrapper.validate());
+  });
+
+  synchronizer->process_commit(commit_message);
+
   ASSERT_TRUE(wrapper.validate());
 }
