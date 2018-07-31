@@ -46,16 +46,24 @@ namespace iroha {
       subscription_.unsubscribe();
     }
 
+    namespace {
+      auto trueStorageApplyPredicate = [](const auto &, auto &, const auto &) {
+        return true;
+      };
+    }
+
     void SynchronizerImpl::process_commit(
         const shared_model::interface::BlockVariant &committed_block_variant) {
       log_->info("processing commit");
-      auto validation_storage = createTemporaryStorage();
-      if (not validation_storage) {
+      auto storage = createTemporaryStorage();
+      if (not storage) {
         return;
       }
+      const auto committed_block_is_empty =
+          committed_block_variant.containsEmptyBlock();
 
       if (validator_->validateBlock(committed_block_variant,
-                                    *validation_storage)) {
+                                    *storage)) {
         // block can be applied to current storage; do it and commit the result
         // to main ametsuchi, if it's not an empty block
         iroha::visit_in_place(
@@ -67,9 +75,7 @@ namespace iroha {
               // we do not need a predicate, as we have already checked
               // applicability of the block
               auto applyStorage = createTemporaryStorage();
-              applyStorage->apply(
-                  *block_ptr,
-                  [](const auto &, auto &, const auto &) { return true; });
+              applyStorage->apply(*block_ptr, trueStorageApplyPredicate);
               mutableFactory_->commit(std::move(applyStorage));
             },
             [this](std::shared_ptr<shared_model::interface::EmptyBlock>
@@ -93,37 +99,25 @@ namespace iroha {
                 .subscribe([&blocks](auto block) { blocks.push_back(block); });
             auto chain = rxcpp::observable<>::iterate(
                 blocks, rxcpp::identity_immediate());
-            auto chain_ends_with_right_block =
-                blocks.back()->hash() == committed_block_variant.prevHash();
+            // if committed block is not empty, it will be on top of downloaded
+            // chain
+            auto chain_ends_with_right_block = committed_block_is_empty
+                ? blocks.back()->hash() == committed_block_variant.prevHash()
+                : blocks.back()->hash() == committed_block_variant.hash();
 
-            if (validator_->validateChain(chain, *validation_storage)
+            if (validator_->validateChain(chain, *storage)
                 and chain_ends_with_right_block) {
-              // peer sent valid chain; apply it and notify subscribers
+              // peer sent valid chain
               notifier_.get_subscriber().on_next(chain);
 
+              // apply chain to storage and commit result; no need to apply
+              // committed block, as it is either empty or already in the chain
+              for (const auto &block : blocks) {
+                storage->apply(*block, trueStorageApplyPredicate);
+              }
+              mutableFactory_->commit(std::move(storage));
 
-              // if last block is not empty, apply it to storage and do nothing
-              // otherwise
-              auto applyStorage = iroha::visit_in_place(
-                  committed_block_variant,
-                  [this, chain = std::move(chain)](
-                      std::shared_ptr<shared_model::interface::Block>
-                          block_ptr) mutable {
-                    notifier_.get_subscriber().on_next(
-                        rxcpp::observable<>::just(block_ptr));
-                    auto applyStorage = createTemporaryStorage();
-                    applyStorage->apply(*block_ptr,
-                                   [](const auto &, auto &, const auto &) {
-                                     return true;
-                                   });
-                    return std::move(applyStorage);
-                  },
-                  [storage = std::move(validation_storage)]() mutable {
-                    return std::move(storage);
-                  });
-
-              // commit the final result and finish
-              mutableFactory_->commit(std::move(applyStorage));
+              // we are finished
               sync_complete = true;
             }
           }

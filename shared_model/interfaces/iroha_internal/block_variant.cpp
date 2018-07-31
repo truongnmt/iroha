@@ -52,6 +52,10 @@ namespace shared_model {
       return AbstractBlock::operator==(rhs);
     }
 
+    bool BlockVariant::containsEmptyBlock() const {
+      return which() == 1;
+    }
+
     BlockVariant *BlockVariant::clone() const {
       return new BlockVariant(*this);
     }

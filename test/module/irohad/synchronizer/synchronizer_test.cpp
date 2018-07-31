@@ -16,10 +16,12 @@
  */
 
 #include <gmock/gmock.h>
+#include <framework/specified_visitor.hpp>
 
 #include "backend/protobuf/block.hpp"
 #include "backend/protobuf/empty_block.hpp"
 #include "builders/protobuf/block.hpp"
+#include "builders/protobuf/empty_block.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
 #include "module/irohad/network/network_mocks.hpp"
@@ -72,14 +74,12 @@ class SynchronizerTest : public ::testing::Test {
         consensus_gate, chain_validator, mutable_factory, block_loader);
   }
 
-  template <typename InterfaceBlockType = shared_model::interface::Block,
-            typename ProtoBlockType = shared_model::proto::Block>
-  std::shared_ptr<InterfaceBlockType> makeCommit(
+  std::shared_ptr<shared_model::interface::Block> makeCommit(
       size_t time = iroha::time::now()) const {
     using TestUnsignedBlockBuilder = shared_model::proto::TemplateBlockBuilder<
         (1 << shared_model::proto::TemplateBlockBuilder<>::total) - 1,
         shared_model::validation::AlwaysValidValidator,
-        shared_model::proto::UnsignedWrapper<ProtoBlockType>>;
+        shared_model::proto::UnsignedWrapper<shared_model::proto::Block>>;
     auto block = TestUnsignedBlockBuilder()
                      .height(5)
                      .createdTime(time)
@@ -88,7 +88,26 @@ class SynchronizerTest : public ::testing::Test {
                          shared_model::crypto::DefaultCryptoAlgorithmType::
                              generateKeypair())
                      .finish();
-    return std::make_shared<ProtoBlockType>(std::move(block));
+    return std::make_shared<shared_model::proto::Block>(std::move(block));
+  }
+
+  std::shared_ptr<shared_model::interface::EmptyBlock> makeEmptyCommit(
+      size_t time = iroha::time::now()) const {
+    using TestUnsignedEmptyBlockBuilder =
+        shared_model::proto::TemplateEmptyBlockBuilder<
+            (1 << shared_model::proto::TemplateEmptyBlockBuilder<>::total) - 1,
+            shared_model::validation::AlwaysValidValidator,
+            shared_model::proto::UnsignedWrapper<
+                shared_model::proto::EmptyBlock>>;
+    auto block = TestUnsignedEmptyBlockBuilder()
+                     .height(5)
+                     .createdTime(time)
+                     .build()
+                     .signAndAddSignature(
+                         shared_model::crypto::DefaultCryptoAlgorithmType::
+                             generateKeypair())
+                     .finish();
+    return std::make_shared<shared_model::proto::EmptyBlock>(std::move(block));
   }
 
   std::shared_ptr<MockChainValidator> chain_validator;
@@ -114,17 +133,17 @@ TEST_F(SynchronizerTest, ValidWhenInitialized) {
  * @then Successful commit
  */
 TEST_F(SynchronizerTest, ValidWhenSingleCommitSynchronized) {
-  auto block = TestBlockBuilder().height(5).build();
-  std::shared_ptr<shared_model::interface::Block> test_block =
-      std::make_shared<shared_model::proto::Block>(std::move(block));
+  shared_model::interface::BlockVariant test_block =
+      std::make_shared<shared_model::proto::Block>(
+          TestBlockBuilder().height(5).build());
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
 
-  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*test_block), _))
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(test_block), _))
       .WillOnce(Return(true));
 
   EXPECT_CALL(*block_loader, retrieveBlocks(_)).Times(0);
@@ -141,7 +160,7 @@ TEST_F(SynchronizerTest, ValidWhenSingleCommitSynchronized) {
     auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
     block_wrapper.subscribe([test_block](auto block) {
       // Check commit block
-      ASSERT_EQ(block->height(), test_block->height());
+      ASSERT_EQ(block->height(), test_block.height());
     });
     ASSERT_TRUE(block_wrapper.validate());
   });
@@ -191,21 +210,24 @@ TEST_F(SynchronizerTest, ValidWhenBadStorage) {
  * @then Successful commit
  */
 TEST_F(SynchronizerTest, ValidWhenValidChain) {
-  auto commit_message = makeCommit();
+  shared_model::interface::BlockVariant commit_message = makeCommit();
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
 
-  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(commit_message), _))
       .WillOnce(Return(false));
 
   EXPECT_CALL(*chain_validator, validateChain(_, _)).WillOnce(Return(true));
 
   EXPECT_CALL(*block_loader, retrieveBlocks(_))
-      .WillOnce(Return(rxcpp::observable<>::just(commit_message)));
+      .WillOnce(Return(rxcpp::observable<>::just(boost::apply_visitor(
+          framework::SpecifiedVisitor<
+              std::shared_ptr<shared_model::interface::Block>>(),
+          commit_message))));
 
   EXPECT_CALL(*consensus_gate, on_commit())
       .WillOnce(Return(
@@ -219,48 +241,10 @@ TEST_F(SynchronizerTest, ValidWhenValidChain) {
     auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
     block_wrapper.subscribe([commit_message](auto block) {
       // Check commit block
-      ASSERT_EQ(block->height(), commit_message->height());
+      ASSERT_EQ(block->height(), commit_message.height());
     });
     ASSERT_TRUE(block_wrapper.validate());
   });
-
-  synchronizer->process_commit(commit_message);
-
-  ASSERT_TRUE(wrapper.validate());
-}
-
-/**
- * @given A commit from consensus and initialized components
- * @when A valid chain with unexpected ending
- * @then No commit should be passed
- */
-TEST_F(SynchronizerTest, InvalidWhenUnexpectedEnd) {
-  auto commit_message = makeCommit(1);
-
-  DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
-      SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
-
-  EXPECT_CALL(*mutable_factory, commit_(_)).Times(0);
-
-  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
-      .WillOnce(Return(false));
-
-  EXPECT_CALL(*chain_validator, validateChain(_, _)).WillOnce(Return(true));
-
-  // wrong block has different hash
-  EXPECT_CALL(*block_loader, retrieveBlocks(_))
-      .WillOnce(Return(rxcpp::observable<>::just(makeCommit(2))));
-
-  EXPECT_CALL(*consensus_gate, on_commit())
-      .WillOnce(Return(
-          rxcpp::observable<>::empty<shared_model::interface::BlockVariant>()));
-
-  init();
-
-  auto wrapper =
-      make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 0);
-  wrapper.subscribe();
 
   synchronizer->process_commit(commit_message);
 
@@ -273,10 +257,11 @@ TEST_F(SynchronizerTest, InvalidWhenUnexpectedEnd) {
  * @then observable of retrieveBlocks must be evaluated once
  */
 TEST_F(SynchronizerTest, OnlyOneRetrieval) {
-  auto commit_message = makeCommit();
+  shared_model::interface::BlockVariant commit_message = makeCommit();
+
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
   EXPECT_CALL(*consensus_gate, on_commit())
       .WillOnce(Return(
@@ -297,14 +282,21 @@ TEST_F(SynchronizerTest, OnlyOneRetrieval) {
               FAIL()
                   << "Observable of retrieveBlocks must be evaluated only once";
             }
-            s.on_next(commit_message);
+            s.on_next(boost::apply_visitor(
+                framework::SpecifiedVisitor<
+                    std::shared_ptr<shared_model::interface::Block>>(),
+                commit_message));
             s.on_completed();
           })));
+
   init();
+
   auto wrapper =
       make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 1);
   wrapper.subscribe();
+
   synchronizer->process_commit(commit_message);
+
   ASSERT_TRUE(wrapper.validate());
 }
 
@@ -314,8 +306,7 @@ TEST_F(SynchronizerTest, OnlyOneRetrieval) {
  * @then empty block is not committed to the ledger
  */
 TEST_F(SynchronizerTest, EmptyBlockNotCommitted) {
-  auto commit_message = makeCommit<shared_model::interface::EmptyBlock,
-                                   shared_model::proto::EmptyBlock>();
+  shared_model::interface::BlockVariant commit_message = makeEmptyCommit();
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
@@ -323,23 +314,19 @@ TEST_F(SynchronizerTest, EmptyBlockNotCommitted) {
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(0);
 
-  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(commit_message), _))
       .WillOnce(Return(true));
 
-  //  EXPECT_CALL(*consensus_gate, on_commit())
-  //      .WillOnce(Return(
-  //          rxcpp::observable<>::empty<shared_model::interface::BlockVariant>()));
+  EXPECT_CALL(*consensus_gate, on_commit())
+      .WillOnce(Return(
+          rxcpp::observable<>::empty<shared_model::interface::BlockVariant>()));
 
   init();
 
   auto wrapper =
       make_test_subscriber<CallExact>(synchronizer->on_commit_chain(), 1);
   wrapper.subscribe([commit_message](auto commit) {
-    auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
-    block_wrapper.subscribe([commit_message](auto block) {
-      // Check commit block
-      ASSERT_EQ(block->height(), commit_message->height());
-    });
+    auto block_wrapper = make_test_subscriber<CallExact>(commit, 0);
     ASSERT_TRUE(block_wrapper.validate());
   });
 
@@ -354,19 +341,22 @@ TEST_F(SynchronizerTest, EmptyBlockNotCommitted) {
  * @then it will try until success
  */
 TEST_F(SynchronizerTest, RetrieveBlockTwoFailures) {
-  auto commit_message = makeCommit();
+  shared_model::interface::BlockVariant commit_message = makeCommit();
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
 
-  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(*commit_message), _))
+  EXPECT_CALL(*chain_validator, validateBlock(testing::Ref(commit_message), _))
       .WillOnce(Return(false));
 
   EXPECT_CALL(*block_loader, retrieveBlocks(_))
-      .WillRepeatedly(Return(rxcpp::observable<>::just(commit_message)));
+      .WillRepeatedly(Return(rxcpp::observable<>::just(boost::apply_visitor(
+          framework::SpecifiedVisitor<
+              std::shared_ptr<shared_model::interface::Block>>(),
+          commit_message))));
 
   // fail the chain validation two times so that synchronizer will try more
   EXPECT_CALL(*chain_validator, validateChain(_, _))
@@ -386,7 +376,7 @@ TEST_F(SynchronizerTest, RetrieveBlockTwoFailures) {
     auto block_wrapper = make_test_subscriber<CallExact>(commit, 1);
     block_wrapper.subscribe([commit_message](auto block) {
       // Check commit block
-      ASSERT_EQ(block->height(), commit_message->height());
+      ASSERT_EQ(block->height(), commit_message.height());
     });
     ASSERT_TRUE(block_wrapper.validate());
   });
