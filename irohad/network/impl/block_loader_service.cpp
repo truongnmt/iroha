@@ -17,18 +17,15 @@
 
 #include "network/impl/block_loader_service.hpp"
 #include "backend/protobuf/block.hpp"
-#include "backend/protobuf/empty_block.hpp"
 
 using namespace iroha;
 using namespace iroha::ametsuchi;
 using namespace iroha::network;
 
-BlockLoaderService::BlockLoaderService(
-    std::shared_ptr<BlockQuery> storage,
-    std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache)
-    : storage_(std::move(storage)),
-      block_cache_(std::move(block_cache)),
-      log_(logger::log("BlockLoaderService")) {}
+BlockLoaderService::BlockLoaderService(std::shared_ptr<BlockQuery> storage)
+    : storage_(std::move(storage)) {
+  log_ = logger::log("BlockLoaderService");
+}
 
 grpc::Status BlockLoaderService::retrieveBlocks(
     ::grpc::ServerContext *context,
@@ -66,18 +63,6 @@ grpc::Status BlockLoaderService::retrieveBlock(
         "Requested to retrieve a block with hash other than the one in cache");
     return grpc::Status(grpc::StatusCode::NOT_FOUND, "Block not found");
   }
-
-  auto transport_block = iroha::visit_in_place(
-      *block_variant,
-      [](std::shared_ptr<shared_model::interface::Block> block) {
-        return std::static_pointer_cast<shared_model::proto::Block>(block)
-            ->getTransport();
-      },
-      [](std::shared_ptr<shared_model::interface::EmptyBlock> empty_block) {
-        return std::static_pointer_cast<shared_model::proto::EmptyBlock>(
-                   empty_block)
-            ->getTransport();
-      });
-  response->CopyFrom(transport_block);
+  response->CopyFrom(result.value());
   return grpc::Status::OK;
 }

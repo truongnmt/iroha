@@ -22,11 +22,9 @@
 
 #include "builders/common_objects/peer_builder.hpp"
 #include "builders/protobuf/common_objects/proto_peer_builder.hpp"
-#include "consensus/consensus_block_cache.hpp"
 #include "cryptography/crypto_provider/crypto_defaults.hpp"
 #include "cryptography/hash.hpp"
 #include "datetime/time.hpp"
-#include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
@@ -41,7 +39,6 @@ using namespace shared_model::crypto;
 
 using testing::A;
 using testing::Return;
-using testing::_;
 
 using wPeer = std::shared_ptr<shared_model::interface::Peer>;
 using wBlock = std::shared_ptr<shared_model::interface::Block>;
@@ -51,9 +48,8 @@ class BlockLoaderTest : public testing::Test {
   void SetUp() override {
     peer_query = std::make_shared<MockPeerQuery>();
     storage = std::make_shared<MockBlockQuery>();
-    block_cache = std::make_shared<iroha::consensus::ConsensusBlockCache>();
     loader = std::make_shared<BlockLoaderImpl>(peer_query, storage);
-    service = std::make_shared<BlockLoaderService>(storage, block_cache);
+    service = std::make_shared<BlockLoaderService>(storage);
 
     grpc::ServerBuilder builder;
     int port = 0;
@@ -90,13 +86,6 @@ class BlockLoaderTest : public testing::Test {
         .createdTime(iroha::time::now());
   }
 
-  // wrap block, so it could be inserted into consensus cache
-  iroha::consensus::ConsensusBlockCache::DataPointer wrapBlock(
-      std::shared_ptr<shared_model::interface::Block> block) const {
-    return std::make_shared<shared_model::interface::BlockVariant>(
-        std::move(block));
-  }
-
   const Hash kPrevHash =
       Hash(std::string(DefaultCryptoAlgorithmType::kHashLength, '0'));
 
@@ -109,7 +98,6 @@ class BlockLoaderTest : public testing::Test {
   std::shared_ptr<BlockLoaderImpl> loader;
   std::shared_ptr<BlockLoaderService> service;
   std::unique_ptr<grpc::Server> server;
-  std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache;
 };
 
 /**
@@ -214,42 +202,33 @@ TEST_F(BlockLoaderTest, ValidWhenMultipleBlocks) {
 }
 
 /**
- * @given block loader @and consensus cache with a block
+ * @given block loader with a block
  * @when retrieveBlock is called with the related hash
- * @then it returns the same block @and block loader service does not ask
- * storage
+ * @then it returns the same block
  */
 TEST_F(BlockLoaderTest, ValidWhenBlockPresent) {
   // Request existing block => success
-  auto requested = std::make_shared<shared_model::proto::Block>(
-      getBaseBlockBuilder().build().signAndAddSignature(key).finish());
-  block_cache->insert(wrapBlock(requested));
+  auto requested =
+      getBaseBlockBuilder().build().signAndAddSignature(key).finish();
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
   EXPECT_CALL(*storage, getBlocksFrom(_)).Times(0);
   auto block_variant = loader->retrieveBlock(peer_key, requested->hash());
 
-  ASSERT_TRUE(block_variant);
-  ASSERT_NO_THROW({
-    auto unwrapped_block = boost::apply_visitor(
-        framework::SpecifiedVisitor<
-            std::shared_ptr<shared_model::interface::Block>>(),
-        *block_variant);
-    ASSERT_EQ(*requested, *unwrapped_block);
-  });
+  ASSERT_TRUE(block);
+  ASSERT_EQ(**block, requested);
 }
 
 /**
- * @given block loader @and consensus cache with a block
+ * @given block loader and a block
  * @when retrieveBlock is called with a different hash
- * @then nothing is returned @and block loader service does not ask storage
+ * @then nothing is returned
  */
 TEST_F(BlockLoaderTest, ValidWhenBlockMissing) {
   // Request nonexisting block => failure
-  auto present = std::make_shared<shared_model::proto::Block>(
-      getBaseBlockBuilder().build().signAndAddSignature(key).finish());
-  block_cache->insert(wrapBlock(present));
+  auto present =
+      getBaseBlockBuilder().build().signAndAddSignature(key).finish();
 
   EXPECT_CALL(*peer_query, getLedgerPeers())
       .WillOnce(Return(std::vector<wPeer>{peer}));
@@ -257,18 +236,4 @@ TEST_F(BlockLoaderTest, ValidWhenBlockMissing) {
   auto block = loader->retrieveBlock(peer_key, kPrevHash);
 
   ASSERT_FALSE(block);
-}
-
-/**
- * @given block loader @and empty consensus cache
- * @when retrieveBlock is called with some hash
- * @then nothing is returned @and block loader service does not ask storage
- */
-TEST_F(BlockLoaderTest, ValidWithEmptyCache) {
-  EXPECT_CALL(*peer_query, getLedgerPeers())
-      .WillOnce(Return(std::vector<wPeer>{peer}));
-  EXPECT_CALL(*storage, getBlocksFrom(_)).Times(0);
-
-  auto emptiness = loader->retrieveBlock(peer_key, kPrevHash);
-  ASSERT_FALSE(emptiness);
 }
