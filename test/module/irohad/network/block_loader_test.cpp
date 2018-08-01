@@ -39,9 +39,9 @@ using namespace iroha::ametsuchi;
 using namespace framework::test_subscriber;
 using namespace shared_model::crypto;
 
+using testing::_;
 using testing::A;
 using testing::Return;
-using testing::_;
 
 using wPeer = std::shared_ptr<shared_model::interface::Peer>;
 using wBlock = std::shared_ptr<shared_model::interface::Block>;
@@ -126,7 +126,7 @@ TEST_F(BlockLoaderTest, ValidWhenSameTopBlock) {
   EXPECT_CALL(*storage, getTopBlock())
       .WillOnce(Return(iroha::expected::makeValue(wBlock(clone(block)))));
   EXPECT_CALL(*storage, getBlocksFrom(block.height() + 1))
-      .WillOnce(Return(rxcpp::observable<>::empty<wBlock>()));
+      .WillOnce(Return(std::vector<wBlock>()));
   auto wrapper = make_test_subscriber<CallExact>(
       loader->retrieveBlocks(peer->pubkey()), 0);
   wrapper.subscribe();
@@ -161,7 +161,7 @@ TEST_F(BlockLoaderTest, ValidWhenOneBlock) {
   EXPECT_CALL(*storage, getTopBlock())
       .WillOnce(Return(iroha::expected::makeValue(wBlock(clone(block)))));
   EXPECT_CALL(*storage, getBlocksFrom(block.height() + 1))
-      .WillOnce(Return(rxcpp::observable<>::just(wBlock(clone(top_block)))));
+      .WillOnce(Return(std::vector<wBlock>{clone(top_block)}));
   auto wrapper =
       make_test_subscriber<CallExact>(loader->retrieveBlocks(peer_key), 1);
   wrapper.subscribe(
@@ -202,8 +202,7 @@ TEST_F(BlockLoaderTest, ValidWhenMultipleBlocks) {
       .WillOnce(Return(std::vector<wPeer>{peer}));
   EXPECT_CALL(*storage, getTopBlock())
       .WillOnce(Return(iroha::expected::makeValue(wBlock(clone(block)))));
-  EXPECT_CALL(*storage, getBlocksFrom(next_height))
-      .WillOnce(Return(rxcpp::observable<>::iterate(blocks)));
+  EXPECT_CALL(*storage, getBlocksFrom(next_height)).WillOnce(Return(blocks));
   auto wrapper = make_test_subscriber<CallExact>(
       loader->retrieveBlocks(peer_key), num_blocks);
   auto height = next_height;

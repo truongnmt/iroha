@@ -60,7 +60,7 @@ namespace iroha {
       std::shared_ptr<BlockLoader> initBlockLoader(
           std::shared_ptr<ametsuchi::PeerQuery> peer_query,
           std::shared_ptr<ametsuchi::BlockQuery> storage,
-          std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache);
+          std::shared_ptr<iroha::consensus::ConsensusBlockCache> block_cache);
 
       std::shared_ptr<BlockLoaderImpl> loader;
       std::shared_ptr<BlockLoaderService> service;

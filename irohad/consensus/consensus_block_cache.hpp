@@ -21,7 +21,7 @@ namespace iroha {
      * Type to represent a consensus result cache with a single block
      */
     using ConsensusResultCache =
-        iroha::cache::SinglePointerCache<ConsensusResult>;
+        cache::SinglePointerCache<ConsensusResult>;
 
   }  // namespace consensus
 }  // namespace iroha
