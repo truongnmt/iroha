@@ -27,9 +27,8 @@ namespace iroha {
     ChainValidatorImpl::ChainValidatorImpl(
         std::shared_ptr<consensus::yac::SupermajorityChecker>
             supermajority_checker)
-        : supermajority_checker_(supermajority_checker) {
-      log_ = logger::log("ChainValidator");
-    }
+        : supermajority_checker_(supermajority_checker),
+          log_(logger::log("ChainValidator")) {}
 
     bool ChainValidatorImpl::validateBlock(
         const shared_model::interface::BlockVariant &block_variant,
@@ -37,7 +36,7 @@ namespace iroha {
       log_->info("validate block: height {}, hash {}",
                  block_variant.height(),
                  block_variant.hash().hex());
-      auto apply_block =
+      auto check_block =
           [this](const shared_model::interface::BlockVariant &block_var,
                  auto &queries,
                  const auto &top_hash) {
@@ -50,8 +49,8 @@ namespace iroha {
                         block_var.signatures(), peers.value());
           };
 
-      // Apply to temporary storage
-      return storage.check(block_variant, apply_block);
+      // check inside of temporary storage
+      return storage.check(block_variant, check_block);
     }
 
     bool ChainValidatorImpl::validateChain(
@@ -64,7 +63,8 @@ namespace iroha {
             log_->info("Validating block: height {}, hash {}",
                        block->height(),
                        block->hash().hex());
-            return this->validateBlock(*block, storage);
+            return this->validateBlock(
+                shared_model::interface::BlockVariant{block}, storage);
           })
           .as_blocking()
           .first();
