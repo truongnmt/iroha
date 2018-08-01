@@ -34,13 +34,11 @@ grpc::Status BlockLoaderService::retrieveBlocks(
     ::grpc::ServerContext *context,
     const proto::BlocksRequest *request,
     ::grpc::ServerWriter<::iroha::protocol::Block> *writer) {
-  storage_->getBlocksFrom(request->height())
-      .map([](auto block) {
-        return std::dynamic_pointer_cast<shared_model::proto::Block>(block)
-            ->getTransport();
-      })
-      .as_blocking()
-      .subscribe([writer](auto block) { writer->Write(block); });
+  auto blocks = storage_->getBlocksFrom(request->height());
+  std::for_each(blocks.begin(), blocks.end(), [&writer](const auto &block) {
+    writer->Write(std::dynamic_pointer_cast<shared_model::proto::Block>(block)
+                      ->getTransport());
+  });
   return grpc::Status::OK;
 }
 
