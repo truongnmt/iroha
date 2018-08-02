@@ -93,18 +93,18 @@ namespace iroha {
         iroha::visit_in_place(
             committed_block_variant,
             [&](std::shared_ptr<shared_model::interface::Block> block_ptr) {
-              notifier.get_subscriber().on_next(
-                  rxcpp::observable<>::just(block_ptr));
-              // we do not need a predicate, as we have already checked
-              // applicability of the block
               auto applyStorage = createTemporaryStorage(mutable_factory, log);
+              if (not applyStorage) {
+                return;
+              }
               applyStorage->apply(*block_ptr, trueStorageApplyPredicate);
               mutable_factory->commit(std::move(applyStorage));
+
+              notifier.get_subscriber().on_next(
+                  rxcpp::observable<>::just(block_ptr));
             },
             [&](std::shared_ptr<shared_model::interface::EmptyBlock>
                     empty_block_ptr) {
-              // we have an empty block, so don't apply it, just notify the
-              // subscriber
               notifier.get_subscriber().on_next(Commit());
             });
       }
@@ -130,8 +130,14 @@ namespace iroha {
           std::unique_ptr<ametsuchi::MutableStorage> storage,
           std::shared_ptr<network::BlockLoader> block_loader,
           std::shared_ptr<validation::ChainValidator> validator) {
-        const auto committed_block_is_empty =
-            committed_block_variant.containsEmptyBlock();
+        const auto committed_block_is_empty = iroha::visit_in_place(
+            committed_block_variant,
+            [](std::shared_ptr<shared_model::interface::Block>) {
+              return false;
+            },
+            [](std::shared_ptr<shared_model::interface::EmptyBlock>) {
+              return true;
+            });
         auto sync_complete = false;
         while (not sync_complete) {
           for (const auto &signature : committed_block_variant.signatures()) {
@@ -144,7 +150,7 @@ namespace iroha {
             auto chain = rxcpp::observable<>::iterate(
                 blocks, rxcpp::identity_immediate());
             // if committed block is not empty, it will be on top of downloaded
-            // chain
+            // chain; otherwise, it'll contain hash of top of that chain
             auto chain_ends_with_right_block = committed_block_is_empty
                 ? blocks.back()->hash() == committed_block_variant.prevHash()
                 : blocks.back()->hash() == committed_block_variant.hash();

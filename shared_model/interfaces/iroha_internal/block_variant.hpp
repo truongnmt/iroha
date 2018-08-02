@@ -43,8 +43,6 @@ namespace shared_model {
 
       bool operator==(const BlockVariant &rhs) const;
 
-      bool containsEmptyBlock() const;
-
      protected:
       BlockVariant *clone() const override;
     };

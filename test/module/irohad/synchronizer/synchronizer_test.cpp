@@ -27,6 +27,7 @@
 #include "module/irohad/network/network_mocks.hpp"
 #include "module/irohad/validation/validation_mocks.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
+#include "module/shared_model/builders/protobuf/test_empty_block_builder.hpp"
 #include "synchronizer/impl/synchronizer_impl.hpp"
 #include "validation/chain_validator.hpp"
 #include "validators/answer.hpp"
@@ -76,10 +77,6 @@ class SynchronizerTest : public ::testing::Test {
 
   std::shared_ptr<shared_model::interface::Block> makeCommit(
       size_t time = iroha::time::now()) const {
-    using TestUnsignedBlockBuilder = shared_model::proto::TemplateBlockBuilder<
-        (1 << shared_model::proto::TemplateBlockBuilder<>::total) - 1,
-        shared_model::validation::AlwaysValidValidator,
-        shared_model::proto::UnsignedWrapper<shared_model::proto::Block>>;
     auto block = TestUnsignedBlockBuilder()
                      .height(5)
                      .createdTime(time)
@@ -93,12 +90,6 @@ class SynchronizerTest : public ::testing::Test {
 
   std::shared_ptr<shared_model::interface::EmptyBlock> makeEmptyCommit(
       size_t time = iroha::time::now()) const {
-    using TestUnsignedEmptyBlockBuilder =
-        shared_model::proto::TemplateEmptyBlockBuilder<
-            (1 << shared_model::proto::TemplateEmptyBlockBuilder<>::total) - 1,
-            shared_model::validation::AlwaysValidValidator,
-            shared_model::proto::UnsignedWrapper<
-                shared_model::proto::EmptyBlock>>;
     auto block = TestUnsignedEmptyBlockBuilder()
                      .height(5)
                      .createdTime(time)
