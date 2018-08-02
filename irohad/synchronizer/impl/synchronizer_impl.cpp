@@ -90,12 +90,9 @@ namespace iroha {
           const rxcpp::subjects::subject<Commit> &notifier,
           std::shared_ptr<ametsuchi::MutableFactory> mutable_factory,
           logger::Logger log) {
-        // block can be applied to current storage; do it and commit the result
-        // to main ametsuchi, if it's not an empty block
         iroha::visit_in_place(
             committed_block_variant,
-            [&](std::shared_ptr<shared_model::interface::Block>
-                    block_ptr) mutable {
+            [&](std::shared_ptr<shared_model::interface::Block> block_ptr) {
               notifier.get_subscriber().on_next(
                   rxcpp::observable<>::just(block_ptr));
               // we do not need a predicate, as we have already checked
