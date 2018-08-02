@@ -25,7 +25,7 @@ using namespace iroha::network;
 
 BlockLoaderService::BlockLoaderService(
     std::shared_ptr<BlockQuery> storage,
-    std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache)
+    std::shared_ptr<consensus::ConsensusResultCache> block_cache)
     : storage_(std::move(storage)),
       block_cache_(std::move(block_cache)),
       log_(logger::log("BlockLoaderService")) {}
@@ -71,7 +71,7 @@ grpc::Status BlockLoaderService::retrieveBlock(
         return std::static_pointer_cast<shared_model::proto::Block>(block)
             ->getTransport();
       },
-      [](auto empty_block) {
+      [](std::shared_ptr<shared_model::interface::EmptyBlock> empty_block) {
         return std::static_pointer_cast<shared_model::proto::EmptyBlock>(
                    empty_block)
             ->getTransport();

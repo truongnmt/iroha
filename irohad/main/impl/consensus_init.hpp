@@ -66,7 +66,7 @@ namespace iroha {
             const shared_model::crypto::Keypair &keypair,
             std::chrono::milliseconds vote_delay_milliseconds,
             std::chrono::milliseconds load_delay_milliseconds,
-            std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache);
+            std::shared_ptr<consensus::ConsensusResultCache> block_cache);
 
         std::shared_ptr<NetworkImpl> consensus_network;
       };

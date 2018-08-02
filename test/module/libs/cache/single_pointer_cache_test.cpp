@@ -104,4 +104,5 @@ TEST_F(SinglePointerCacheTest, MultithreadedCache) {
       writer_two{write_two};
   writer_one.join();
   reader.join();
+  releaser.join();
 }

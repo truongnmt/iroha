@@ -40,7 +40,7 @@ namespace iroha {
           std::shared_ptr<YacHashProvider> hash_provider,
           std::shared_ptr<simulator::BlockCreator> block_creator,
           std::shared_ptr<network::BlockLoader> block_loader,
-          std::shared_ptr<iroha::consensus::ConsensusResultCache> block_cache,
+          std::shared_ptr<consensus::ConsensusResultCache> block_cache,
           uint64_t delay)
           : hash_gate_(std::move(hash_gate)),
             orderer_(std::move(orderer)),
