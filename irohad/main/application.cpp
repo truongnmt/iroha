@@ -274,8 +274,8 @@ void Irohad::initTransactionCommandService() {
       std::make_shared<::torii::CommandService>(tx_processor,
                                                 storage,
                                                 status_bus_,
-                                                std::chrono::seconds(1),
-                                                2 * proposal_delay_);
+                                                std::chrono::seconds(60),
+                                                6 * proposal_delay_);
 
   log_->info("[Init] => command service");
 }
