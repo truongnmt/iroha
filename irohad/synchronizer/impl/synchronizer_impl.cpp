@@ -167,6 +167,7 @@ namespace iroha {
 
               // we are finished
               sync_complete = true;
+              break;
             }
           }
         }
