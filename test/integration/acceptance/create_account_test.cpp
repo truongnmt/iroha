@@ -44,19 +44,20 @@ TEST_F(CreateAccount, Basic) {
 /**
  * @given some user without can_create_account permission
  * @when execute tx with CreateAccount command
- * @then there is no tx in proposal
+ * @then transaction to create account did not pass
  */
 TEST_F(CreateAccount, NoPermissions) {
   IntegrationTestFramework(1)
       .setInitialState(kAdminKeypair)
       .sendTx(makeUserWithPerms({interface::permissions::Role::kGetMyTxs}))
       .skipProposal()
+      .skipVerifiedProposal()
       .skipBlock()
       .sendTx(complete(baseTx().createAccount(
           kNewUser, kDomain, kNewUserKeypair.publicKey())))
       .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
+      .checkVerifiedProposal(
+          [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
       .done();
 }
 

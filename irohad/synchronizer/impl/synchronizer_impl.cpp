@@ -105,7 +105,9 @@ namespace iroha {
             },
             [&](std::shared_ptr<shared_model::interface::EmptyBlock>
                     empty_block_ptr) {
-              notifier.get_subscriber().on_next(Commit());
+              notifier.get_subscriber().on_next(
+                  rxcpp::observable<>::empty<
+                      std::shared_ptr<shared_model::interface::Block>>());
             });
       }
 
