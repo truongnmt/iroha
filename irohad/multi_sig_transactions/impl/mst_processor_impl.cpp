@@ -109,6 +109,11 @@ namespace iroha {
         data.begin(), data.end(), [this, &current_time](const auto &peer) {
           auto diff = storage_->getDiffState(peer, current_time);
           if (not diff.isEmpty()) {
+            log_->info("Propagated data consists of transactions:");
+            for (const auto &tx : diff.getTransactions()) {
+              log_->info("{}", tx->toString());
+            }
+            log_->info("Above transactions are propagated to {}", peer->toString());
             transport_->sendState(*peer, diff);
           }
         });

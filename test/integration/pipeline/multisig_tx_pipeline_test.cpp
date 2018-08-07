@@ -77,6 +77,8 @@ TEST_F(MstPipelineTest, OnePeerSendsTest) {
   IntegrationTestFramework(1, {}, [](auto &i) { i.done(); }, true)
       .setInitialState(kAdminKeypair)
       .sendTx(user_tx)
+      .skipProposal()
+      .skipVerifiedProposal()
       .skipBlock()
       .sendTx(signTx(tx, kUserKeypair))
       // TODO(@l4l) 21/05/18 IR-1339
@@ -85,3 +87,5 @@ TEST_F(MstPipelineTest, OnePeerSendsTest) {
       .sendTx(signTx(tx, signatories.at(1)))
       .skipBlock();
 }
+//.checkVerifiedProposal(
+//[](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); });

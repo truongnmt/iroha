@@ -53,9 +53,6 @@ TEST(RegressionTest, SequentialInitialization) {
   auto checkProposal = [](auto &proposal) {
     ASSERT_EQ(proposal->transactions().size(), 1);
   };
-  auto checkBlock = [](auto &block) {
-    ASSERT_EQ(block->transactions().size(), 0);
-  };
 
   const std::string dbname = "dbseqinit";
   {
@@ -63,14 +60,18 @@ TEST(RegressionTest, SequentialInitialization) {
         .setInitialState(kAdminKeypair)
         .sendTx(tx, checkStatelessValid)
         .skipProposal()
-        .skipBlock();
+        .checkVerifiedProposal([](auto &proposal) {
+          ASSERT_EQ(proposal->transactions().size(), 0);
+        });
   }
   {
     integration_framework::IntegrationTestFramework(1, dbname)
         .setInitialState(kAdminKeypair)
         .sendTx(tx, checkStatelessValid)
         .checkProposal(checkProposal)
-        .checkBlock(checkBlock)
+        .checkVerifiedProposal([](auto &proposal) {
+          ASSERT_EQ(proposal->transactions().size(), 0);
+        })
         .done();
   }
 }

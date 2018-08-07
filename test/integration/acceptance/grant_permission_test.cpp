@@ -51,10 +51,12 @@ class GrantPermissionTest : public AcceptanceFixture {
         .sendTx(
             makeAccountWithPerms(kAccount1, kAccount1Keypair, perm1, kRole1))
         .skipProposal()
+        .skipVerifiedProposal()
         .skipBlock()
         .sendTx(
             makeAccountWithPerms(kAccount2, kAccount2Keypair, perm2, kRole2))
         .skipProposal()
+        .skipVerifiedProposal()
         .skipBlock();
     return itf;
   }
@@ -381,7 +383,6 @@ class GrantPermissionTest : public AcceptanceFixture {
  * @given an account with rights to grant rights to other accounts
  * @when the account grants rights to non-existing account
  * @then this transaction is stateful invalid
- * AND it is not written in the block
  */
 TEST_F(GrantPermissionTest, GrantToInexistingAccount) {
   IntegrationTestFramework(1)
@@ -389,14 +390,15 @@ TEST_F(GrantPermissionTest, GrantToInexistingAccount) {
       .sendTx(makeAccountWithPerms(
           kAccount1, kAccount1Keypair, kCanGrantAll, kRole1))
       .skipProposal()
+      .skipVerifiedProposal()
       .skipBlock()
       .sendTx(accountGrantToAccount(kAccount1,
                                     kAccount1Keypair,
                                     kAccount2,
                                     permissions::Grantable::kAddMySignatory))
       .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
+      .checkVerifiedProposal(
+          [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
       .done();
 }
 
@@ -622,19 +624,20 @@ TEST_F(GrantPermissionTest, GrantTransferPermission) {
  * @given an account !without! rights to grant rights to other accounts
  * @when the account grants rights to an existing account
  * @then this transaction is statefully invalid
- * AND it is not written in the block
  */
 TEST_F(GrantPermissionTest, GrantWithoutGrantPermissions) {
-  IntegrationTestFramework itf(1);
-  createTwoAccounts(itf, {Role::kReceive}, {Role::kReceive});
   for (auto &perm : kAllGrantable) {
-    itf.sendTx(
-           accountGrantToAccount(kAccount1, kAccount1Keypair, kAccount2, perm))
+    IntegrationTestFramework itf(1);
+    createTwoAccounts(itf,
+                      {Role::kReceive},
+                      {Role::kReceive})
+        .sendTx(accountGrantToAccount(
+           kAccount1, kAccount1Keypair, kAccount2, perm))
         .skipProposal()
-        .checkBlock(
-            [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); });
+        .checkVerifiedProposal([](auto &proposal)
+           { ASSERT_EQ(proposal->transactions().size(), 0); })
+        .done();
   }
-  itf.done();
 }
 
 /**
@@ -643,7 +646,6 @@ TEST_F(GrantPermissionTest, GrantWithoutGrantPermissions) {
  * AND an account that have already granted a permission to a permittee
  * @when the account grants the same permission to the same permittee
  * @then this transaction is statefully invalid
- * AND it is not written in the block
  */
 
 TEST_F(GrantPermissionTest, GrantMoreThanOnce) {
@@ -654,13 +656,14 @@ TEST_F(GrantPermissionTest, GrantMoreThanOnce) {
                                     kAccount2,
                                     permissions::Grantable::kAddMySignatory))
       .skipProposal()
+      .skipVerifiedProposal()
       .skipBlock()
       .sendTx(accountGrantToAccount(kAccount1,
                                     kAccount1Keypair,
                                     kAccount2,
                                     permissions::Grantable::kAddMySignatory))
       .skipProposal()
-      .checkBlock(
-          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
+      .checkVerifiedProposal(
+          [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
       .done();
 }
