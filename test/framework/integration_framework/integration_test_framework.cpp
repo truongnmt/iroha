@@ -229,7 +229,7 @@ namespace integration_framework {
   IntegrationTestFramework &IntegrationTestFramework::sendTxAwait(
       const shared_model::proto::Transaction &tx,
       std::function<void(const BlockType &)> check) {
-    sendTx(tx).skipProposal().checkBlock(check);
+    sendTx(tx).skipProposal().skipVerifiedProposal().checkBlock(check);
     return *this;
   }
 
