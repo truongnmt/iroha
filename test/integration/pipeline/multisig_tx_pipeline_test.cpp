@@ -58,10 +58,10 @@ class MstPipelineTest : public AcceptanceFixture {
             .finish();
     auto add_signatories_tx = baseTx().quorum(1);
     for (size_t i = 0; i < sigs; ++i) {
-      auto signatory = crypto::DefaultCryptoAlgorithmType::generateKeypair();
-      signatories.push_back(signatory);
+      signatories.push_back(
+          crypto::DefaultCryptoAlgorithmType::generateKeypair());
       add_signatories_tx =
-          add_signatories_tx.addSignatory(kUserId, signatory.publicKey());
+          add_signatories_tx.addSignatory(kUserId, signatories[i].publicKey());
     }
     add_signatories_tx.setAccountQuorum(kUserId, sigs + 1);
     itf.sendTx(create_user_tx)
@@ -110,8 +110,8 @@ TEST_F(MstPipelineTest, OnePeerSendsTest) {
       ->sendTx(signTx(tx, kUserKeypair))
       // TODO(@l4l) 21/05/18 IR-1339
       // tx should be checked for MST_AWAIT status
-      .sendTx(signTx(tx, signatories.at(0)))
-      .sendTx(signTx(tx, signatories.at(1)))
+      .sendTx(signTx(tx, signatories[0]))
+      .sendTx(signTx(tx, signatories[1]))
       .skipProposal()
       .skipVerifiedProposal()
       .checkBlock([](auto &proposal) {
