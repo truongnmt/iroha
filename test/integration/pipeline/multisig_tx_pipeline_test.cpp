@@ -58,7 +58,7 @@ class MstPipelineTest : public AcceptanceFixture {
             .finish();
     auto add_signatories_tx = baseTx().quorum(1);
     for (size_t i = 0; i < sigs; ++i) {
-      signatories.emplace_back(
+      signatories.push_back(
           crypto::DefaultCryptoAlgorithmType::generateKeypair());
       add_signatories_tx =
           add_signatories_tx.addSignatory(kUserId, signatories[i].publicKey());
