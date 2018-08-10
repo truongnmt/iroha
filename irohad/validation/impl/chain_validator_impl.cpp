@@ -32,7 +32,7 @@ namespace iroha {
 
     bool ChainValidatorImpl::validateBlock(
         const shared_model::interface::BlockVariant &block_variant,
-        ametsuchi::MutableStorage &storage) {
+        ametsuchi::MutableStorage &storage) const {
       log_->info("validate block: height {}, hash {}",
                  block_variant.height(),
                  block_variant.hash().hex());
@@ -56,7 +56,7 @@ namespace iroha {
     bool ChainValidatorImpl::validateChain(
         rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
             blocks,
-        ametsuchi::MutableStorage &storage) {
+        ametsuchi::MutableStorage &storage) const {
       log_->info("validate chain...");
       return blocks
           .all([this, &storage](auto block) {

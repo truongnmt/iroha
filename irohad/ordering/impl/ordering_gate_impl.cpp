@@ -81,9 +81,7 @@ namespace iroha {
                     [this](std::shared_ptr<shared_model::interface::Block>
                                block_ptr) {
                       last_block_height_ = block_ptr->height();
-                    },
-                    // do nothing on complete
-                    [] {});
+                    });
                 return last_block_height_;
               })
               .start_with(last_block_height_);

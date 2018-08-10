@@ -37,12 +37,12 @@ namespace iroha {
 
     class MockChainValidator : public ChainValidator {
      public:
-      MOCK_METHOD2(validateChain,
+      MOCK_CONST_METHOD2(validateChain,
                    bool(rxcpp::observable<
                             std::shared_ptr<shared_model::interface::Block>>,
                         ametsuchi::MutableStorage &));
 
-      MOCK_METHOD2(validateBlock,
+      MOCK_CONST_METHOD2(validateBlock,
                    bool(const shared_model::interface::BlockVariant &,
                         ametsuchi::MutableStorage &));
     };

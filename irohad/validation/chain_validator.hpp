@@ -56,7 +56,7 @@ namespace iroha {
       virtual bool validateChain(
           rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
               commit,
-          ametsuchi::MutableStorage &storage) = 0;
+          ametsuchi::MutableStorage &storage) const = 0;
 
       /**
        * Block validation will check if all signatures and meta-data are valid.
@@ -66,7 +66,7 @@ namespace iroha {
        */
       virtual bool validateBlock(
           const shared_model::interface::BlockVariant &block_variant,
-          ametsuchi::MutableStorage &storage) = 0;
+          ametsuchi::MutableStorage &storage) const = 0;
     };
   }  // namespace validation
 }  // namespace iroha

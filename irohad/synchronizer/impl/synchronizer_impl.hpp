@@ -36,14 +36,14 @@ namespace iroha {
 
       ~SynchronizerImpl();
 
-      void process_commit(
-          const shared_model::interface::BlockVariant &committed_block_variant) override;
+      void process_commit(const shared_model::interface::BlockVariant
+                              &committed_block_variant) override;
 
       rxcpp::observable<Commit> on_commit_chain() override;
 
      private:
       std::shared_ptr<validation::ChainValidator> validator_;
-      std::shared_ptr<ametsuchi::MutableFactory> mutableFactory_;
+      std::shared_ptr<ametsuchi::MutableFactory> mutable_factory_;
       std::shared_ptr<network::BlockLoader> block_loader_;
 
       // internal
@@ -52,6 +52,36 @@ namespace iroha {
 
       logger::Logger log_;
 
+      /**
+       * Creates a temporary storage out of the provided factory
+       * @return pointer to created storage
+       */
+      std::unique_ptr<ametsuchi::MutableStorage> createTemporaryStorage() const;
+
+      /**
+       * Process block, which can be applied to current storage directly:
+       *   - apply non-empty block and commit result to Ametsuchi
+       *     @or
+       *   - don't apply empty block
+       * In both cases notify the subscriber about commit
+       * @param committed_block_variant to be applied
+       */
+      void processApplicableBlock(const shared_model::interface::BlockVariant
+                                      &committed_block_variant) const;
+
+      /**
+       * Process block, which cannot be applied to current storage directly:
+       *   - try to download missing blocks from other peers (don't stop, if
+       *     they cannot provide blocks at that moment)
+       *   - apply the chain on top of existing storage and commit result
+       * Committed block variant is not applied, because it's either empty or
+       * already exists in downloaded chain
+       * @param committed_block_variant to be processed
+       * @param storage to apply downloaded chain
+       */
+      void processUnapplicableBlock(
+          const shared_model::interface::BlockVariant &committed_block_variant,
+          std::unique_ptr<ametsuchi::MutableStorage> storage) const;
     };
   }  // namespace synchronizer
 }  // namespace iroha
