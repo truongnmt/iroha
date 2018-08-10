@@ -23,6 +23,7 @@
 #include "backend/protobuf/block.hpp"
 #include "backend/protobuf/empty_block.hpp"
 #include "interfaces/iroha_internal/block_variant.hpp"
+#include "ametsuchi/wsv_query.hpp"
 
 namespace iroha {
   namespace synchronizer {
