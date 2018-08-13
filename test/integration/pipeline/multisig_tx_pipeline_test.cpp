@@ -107,7 +107,8 @@ TEST_F(MstPipelineTest, OnePeerSendsTest) {
 
   IntegrationTestFramework itf(1, {}, [](auto &i) { i.done(); }, true);
   itf.setInitialState(kAdminKeypair);
-  makeMstUser(itf)
+  auto &mst_itf = makeMstUser(itf);
+  mst_itf
       .sendTx(signTx(tx, kUserKeypair))
       // TODO(@l4l) 21/05/18 IR-1339
       // tx should be checked for MST_AWAIT status
