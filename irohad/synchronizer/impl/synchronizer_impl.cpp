@@ -91,28 +91,26 @@ namespace iroha {
           });
     }
 
-    void SynchronizerImpl::downloadAndApplyMissingChain(
-        const shared_model::interface::BlockVariant &committed_block_variant,
-        std::unique_ptr<ametsuchi::MutableStorage> storage) const {
+    rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
+    SynchronizerImpl::downloadMissingChain(
+        const shared_model::interface::BlockVariant &committed_block_variant)
+        const {
+      auto check_storage = createTemporaryStorage();
       while (true) {
         for (const auto &peer_signature :
              committed_block_variant.signatures()) {
-          std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
-          auto chain = block_loader_
-                           ->retrieveBlocks(shared_model::crypto::PublicKey(
-                               peer_signature.publicKey()))
-                           .as_blocking();
-          chain.subscribe([&blocks](auto block) { blocks.push_back(block); });
+          auto chain = block_loader_->retrieveBlocks(
+              shared_model::crypto::PublicKey(peer_signature.publicKey()));
           // if committed block is not empty, it will be on top of downloaded
           // chain; otherwise, it'll contain hash of top of that chain
           auto chain_ends_with_right_block = iroha::visit_in_place(
               committed_block_variant,
-              [last_downloaded_block = blocks.back()](
+              [last_downloaded_block = chain.as_blocking().last()](
                   std::shared_ptr<shared_model::interface::Block>
                       committed_block) {
                 return last_downloaded_block->hash() == committed_block->hash();
               },
-              [last_downloaded_block = blocks.back()](
+              [last_downloaded_block = chain.as_blocking().last()](
                   std::shared_ptr<shared_model::interface::EmptyBlock>
                       committed_empty_block) {
                 return last_downloaded_block->hash()
@@ -120,19 +118,9 @@ namespace iroha {
               });
 
           if (chain_ends_with_right_block
-              and validator_->validateChain(chain.source, *storage)) {
+              and validator_->validateChain(chain, *check_storage)) {
             // peer sent valid chain
-            notifier_.get_subscriber().on_next(chain.source);
-
-            for (const auto &block : blocks) {
-              // we don't need to check correctness of downloaded blocks, as
-              // it was done earlier on another peer
-              storage->apply(*block, trueStorageApplyPredicate);
-            }
-            mutable_factory_->commit(std::move(storage));
-
-            // we are finished
-            return;
+            return chain;
           }
         }
       }
@@ -149,8 +137,19 @@ namespace iroha {
       if (validator_->validateBlock(committed_block_variant, *storage)) {
         processApplicableBlock(committed_block_variant);
       } else {
-        downloadAndApplyMissingChain(committed_block_variant,
-                                     std::move(storage));
+        auto missing_chain = downloadMissingChain(committed_block_variant);
+        notifier_.get_subscriber().on_next(missing_chain);
+
+        // apply downloaded chain
+        std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
+        missing_chain.as_blocking().subscribe(
+            [&blocks](auto block) { blocks.push_back(block); });
+        for (const auto &block : blocks) {
+          // we don't need to check correctness of downloaded blocks, as
+          // it was done earlier on another peer
+          storage->apply(*block, trueStorageApplyPredicate);
+        }
+        mutable_factory_->commit(std::move(storage));
       }
     }
 

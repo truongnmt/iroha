@@ -70,17 +70,14 @@ namespace iroha {
                                       &committed_block_variant) const;
 
       /**
-       * - try to download missing blocks from other peers (don't stop, if
-       *   they cannot provide blocks at that moment)
-       * - apply the chain on top of existing storage and commit result
-       * Provided block variant is not applied, because it's either empty or
-       * already exists in downloaded chain
-       * @param committed_block_variant to be processed
-       * @param storage to apply downloaded chain
+       * Download part of chain, which is missed on this peer, from another; try
+       * until success
+       * @param committed_block_variant - top of chain to be downloaded
+       * @return observable with missed part of the chain
        */
-      void downloadAndApplyMissingChain(
-          const shared_model::interface::BlockVariant &committed_block_variant,
-          std::unique_ptr<ametsuchi::MutableStorage> storage) const;
+      rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
+      downloadMissingChain(const shared_model::interface::BlockVariant
+                               &committed_block_variant) const;
     };
   }  // namespace synchronizer
 }  // namespace iroha

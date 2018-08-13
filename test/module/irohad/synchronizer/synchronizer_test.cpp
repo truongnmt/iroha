@@ -205,7 +205,7 @@ TEST_F(SynchronizerTest, ValidWhenValidChain) {
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
 
@@ -245,15 +245,17 @@ TEST_F(SynchronizerTest, ValidWhenValidChain) {
 /**
  * @given A valid block that cannot be applied directly
  * @when process_commit is called
- * @then observable of retrieveBlocks must be evaluated twice: to retrieve
- * blocks and to validate chain
+ * @then observable of retrieveBlocks must be evaluated four times:
+ *   - to validate whole chain
+ *   - to validate last block of chain (x2)
+ *   - to create a vector
  */
-TEST_F(SynchronizerTest, ExactlyTwoRetrievals) {
+TEST_F(SynchronizerTest, ExactlyThreeRetrievals) {
   shared_model::interface::BlockVariant commit_message = makeCommit();
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
   EXPECT_CALL(*consensus_gate, on_commit())
       .WillOnce(Return(
@@ -266,19 +268,19 @@ TEST_F(SynchronizerTest, ExactlyTwoRetrievals) {
         return true;
       }));
   EXPECT_CALL(*block_loader, retrieveBlocks(_))
-      .WillOnce(Return(rxcpp::observable<>::create<
-                       std::shared_ptr<shared_model::interface::Block>>(
-          [commit_message](auto s) {
-            static int times = 0;
-            if (times != 2) {
-              FAIL() << "Observable of retrieveBlocks must be evaluated twice";
-            }
-            s.on_next(boost::apply_visitor(
-                framework::SpecifiedVisitor<
-                    std::shared_ptr<shared_model::interface::Block>>(),
-                commit_message));
-            s.on_completed();
-          })));
+      .WillOnce(Return(rxcpp::observable<>::create<std::shared_ptr<
+                           shared_model::interface::Block>>([commit_message](
+                                                                auto s) {
+        static int times = 0;
+        if (times++ > 4) {
+          FAIL() << "Observable of retrieveBlocks must be evaluated four times";
+        }
+        s.on_next(boost::apply_visitor(
+            framework::SpecifiedVisitor<
+                std::shared_ptr<shared_model::interface::Block>>(),
+            commit_message));
+        s.on_completed();
+      })));
 
   init();
 
@@ -336,7 +338,7 @@ TEST_F(SynchronizerTest, RetrieveBlockTwoFailures) {
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
       SetFactory(&createMockMutableStorage);
-  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(1);
+  EXPECT_CALL(*mutable_factory, createMutableStorage()).Times(2);
 
   EXPECT_CALL(*mutable_factory, commit_(_)).Times(1);
 
