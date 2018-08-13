@@ -95,15 +95,14 @@ namespace iroha {
         const shared_model::interface::BlockVariant &committed_block_variant,
         std::unique_ptr<ametsuchi::MutableStorage> storage) const {
       while (true) {
-        for (const auto &signature : committed_block_variant.signatures()) {
+        for (const auto &peer_signature :
+             committed_block_variant.signatures()) {
           std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
-          block_loader_
-              ->retrieveBlocks(
-                  shared_model::crypto::PublicKey(signature.publicKey()))
-              .as_blocking()
-              .subscribe([&blocks](auto block) { blocks.push_back(block); });
-          auto chain =
-              rxcpp::observable<>::iterate(blocks, rxcpp::identity_immediate());
+          auto chain = block_loader_
+                           ->retrieveBlocks(shared_model::crypto::PublicKey(
+                               peer_signature.publicKey()))
+                           .as_blocking();
+          chain.subscribe([&blocks](auto block) { blocks.push_back(block); });
           // if committed block is not empty, it will be on top of downloaded
           // chain; otherwise, it'll contain hash of top of that chain
           auto chain_ends_with_right_block = iroha::visit_in_place(
@@ -121,9 +120,9 @@ namespace iroha {
               });
 
           if (chain_ends_with_right_block
-              and validator_->validateChain(chain, *storage)) {
+              and validator_->validateChain(chain.source, *storage)) {
             // peer sent valid chain
-            notifier_.get_subscriber().on_next(chain);
+            notifier_.get_subscriber().on_next(chain.source);
 
             for (const auto &block : blocks) {
               // we don't need to check correctness of downloaded blocks, as

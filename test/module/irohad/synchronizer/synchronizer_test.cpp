@@ -245,9 +245,10 @@ TEST_F(SynchronizerTest, ValidWhenValidChain) {
 /**
  * @given A valid block that cannot be applied directly
  * @when process_commit is called
- * @then observable of retrieveBlocks must be evaluated once
+ * @then observable of retrieveBlocks must be evaluated twice: to retrieve
+ * blocks and to validate chain
  */
-TEST_F(SynchronizerTest, OnlyOneRetrieval) {
+TEST_F(SynchronizerTest, ExactlyTwoRetrievals) {
   shared_model::interface::BlockVariant commit_message = makeCommit();
 
   DefaultValue<expected::Result<std::unique_ptr<MutableStorage>, std::string>>::
@@ -269,9 +270,8 @@ TEST_F(SynchronizerTest, OnlyOneRetrieval) {
                        std::shared_ptr<shared_model::interface::Block>>(
           [commit_message](auto s) {
             static int times = 0;
-            if (times++) {
-              FAIL()
-                  << "Observable of retrieveBlocks must be evaluated only once";
+            if (times != 2) {
+              FAIL() << "Observable of retrieveBlocks must be evaluated twice";
             }
             s.on_next(boost::apply_visitor(
                 framework::SpecifiedVisitor<

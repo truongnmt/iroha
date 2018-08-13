@@ -41,7 +41,7 @@ class MstPipelineTest : public AcceptanceFixture {
   /**
    * Creates a mst user
    * @param itf, in which the user will be created
-   * @param sigs - signatories of that mst user
+   * @param sigs - number of signatories of that mst user
    * @return itf with created user
    */
   IntegrationTestFramework &makeMstUser(IntegrationTestFramework &itf,

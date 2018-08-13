@@ -39,7 +39,8 @@ namespace iroha {
 
       /**
        * Emit committed blocks
-       * Note: from one block received on consensus
+       * Note 1: from one block received on consensus
+       * Note 2: commit may be empty; in that case, it can contain empty pointer
        */
       virtual rxcpp::observable<Commit> on_commit_chain() = 0;
 
