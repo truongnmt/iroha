@@ -44,7 +44,8 @@ class MstPipelineTest : public AcceptanceFixture {
    * @param sigs - signatories of that mst user
    * @return itf with created user
    */
-  auto makeMstUser(IntegrationTestFramework &itf, size_t sigs = kSignatories) {
+  IntegrationTestFramework &makeMstUser(IntegrationTestFramework &itf,
+                                        size_t sigs = kSignatories) {
     auto create_user_tx =
         createUserWithPerms(
             kUser,
@@ -86,7 +87,7 @@ class MstPipelineTest : public AcceptanceFixture {
         .checkBlock([](auto &proposal) {
           ASSERT_EQ(proposal->transactions().size(), 1);
         });
-    return &itf;
+    return itf;
   }
 
   const std::string kNewRole = "rl"s;
@@ -107,7 +108,7 @@ TEST_F(MstPipelineTest, OnePeerSendsTest) {
   IntegrationTestFramework itf(1, {}, [](auto &i) { i.done(); }, true);
   itf.setInitialState(kAdminKeypair);
   makeMstUser(itf)
-      ->sendTx(signTx(tx, kUserKeypair))
+      .sendTx(signTx(tx, kUserKeypair))
       // TODO(@l4l) 21/05/18 IR-1339
       // tx should be checked for MST_AWAIT status
       .sendTx(signTx(tx, signatories[0]))

@@ -34,7 +34,7 @@ namespace iroha {
           std::shared_ptr<ametsuchi::MutableFactory> mutableFactory,
           std::shared_ptr<network::BlockLoader> blockLoader);
 
-      ~SynchronizerImpl();
+      ~SynchronizerImpl() override;
 
       void process_commit(const shared_model::interface::BlockVariant
                               &committed_block_variant) override;
@@ -70,16 +70,15 @@ namespace iroha {
                                       &committed_block_variant) const;
 
       /**
-       * Process block, which cannot be applied to current storage directly:
-       *   - try to download missing blocks from other peers (don't stop, if
-       *     they cannot provide blocks at that moment)
-       *   - apply the chain on top of existing storage and commit result
-       * Committed block variant is not applied, because it's either empty or
+       * - try to download missing blocks from other peers (don't stop, if
+       *   they cannot provide blocks at that moment)
+       * - apply the chain on top of existing storage and commit result
+       * Provided block variant is not applied, because it's either empty or
        * already exists in downloaded chain
        * @param committed_block_variant to be processed
        * @param storage to apply downloaded chain
        */
-      void processUnapplicableBlock(
+      void downloadAndApplyMissingChain(
           const shared_model::interface::BlockVariant &committed_block_variant,
           std::unique_ptr<ametsuchi::MutableStorage> storage) const;
     };

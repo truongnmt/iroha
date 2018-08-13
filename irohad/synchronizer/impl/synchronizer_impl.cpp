@@ -91,11 +91,10 @@ namespace iroha {
           });
     }
 
-    void SynchronizerImpl::processUnapplicableBlock(
+    void SynchronizerImpl::downloadAndApplyMissingChain(
         const shared_model::interface::BlockVariant &committed_block_variant,
         std::unique_ptr<ametsuchi::MutableStorage> storage) const {
-      auto sync_complete = false;
-      while (not sync_complete) {
+      while (true) {
         for (const auto &signature : committed_block_variant.signatures()) {
           std::vector<std::shared_ptr<shared_model::interface::Block>> blocks;
           block_loader_
@@ -121,8 +120,8 @@ namespace iroha {
                     == committed_empty_block->prevHash();
               });
 
-          if (validator_->validateChain(chain, *storage)
-              and chain_ends_with_right_block) {
+          if (chain_ends_with_right_block
+              and validator_->validateChain(chain, *storage)) {
             // peer sent valid chain
             notifier_.get_subscriber().on_next(chain);
 
@@ -134,8 +133,7 @@ namespace iroha {
             mutable_factory_->commit(std::move(storage));
 
             // we are finished
-            sync_complete = true;
-            break;
+            return;
           }
         }
       }
@@ -152,7 +150,8 @@ namespace iroha {
       if (validator_->validateBlock(committed_block_variant, *storage)) {
         processApplicableBlock(committed_block_variant);
       } else {
-        processUnapplicableBlock(committed_block_variant, std::move(storage));
+        downloadAndApplyMissingChain(committed_block_variant,
+                                     std::move(storage));
       }
     }
 
