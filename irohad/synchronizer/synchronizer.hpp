@@ -39,10 +39,9 @@ namespace iroha {
 
       /**
        * Emit committed blocks
-       * Note 1: from one block received on consensus
-       * Note 2: commit may be empty; in that case, it can contain empty
-       * pointer, if ledger state on this peer is up-to-date, so there is
-       * nothing to download or commit
+       * Note 1: from the block received on consensus
+       * Note 2: if ledger state on this peer is up-to-date, commit contains
+       * just empty pointer, as there's nothing to download or commit
        */
       virtual rxcpp::observable<Commit> on_commit_chain() = 0;
 
