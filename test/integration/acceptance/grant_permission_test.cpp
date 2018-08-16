@@ -265,12 +265,14 @@ TEST_F(GrantablePermissionsFixture, GrantTransferPermission) {
  */
 TEST_F(GrantablePermissionsFixture, GrantWithoutGrantPermissions) {
   for (auto &perm : kAllGrantable) {
-  IntegrationTestFramework itf(1);
-  createTwoAccounts(itf, {Role::kReceive}, {Role::kReceive});
-    itf.sendTx(grantPermission(kAccount1, kAccount1Keypair, kAccount2, perm))
+    IntegrationTestFramework itf(1);
+    itf.setInitialState(kAdminKeypair);
+    createTwoAccounts(itf, {Role::kReceive}, {Role::kReceive})
+        .sendTx(grantPermission(kAccount1, kAccount1Keypair, kAccount2, perm))
         .skipProposal()
-        .checkVerifiedProposal([](auto &proposal)
-           { ASSERT_EQ(proposal->transactions().size(), 0); })
+        .checkVerifiedProposal([](auto &proposal) {
+          ASSERT_EQ(proposal->transactions().size(), 0);
+        })
         .done();
   }
 }
