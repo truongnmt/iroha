@@ -349,16 +349,14 @@ namespace grantables {
         .checkProposal([](auto &proposal) {
           ASSERT_EQ(proposal->transactions().size(), 1);
         })
-        .getTxStatus(
-            last_check_tx.hash(),
-            [](auto &status) {
-              auto message = status.errorMessage();
+        .getTxStatus(last_check_tx.hash(),
+                     [](auto &status) {
+                       auto message = status.errorMessage();
 
-              ASSERT_NE(
-                  message.find("did not pass verification"),
-                  std::string::npos)
-                  << "Fail reason: " << message;
-            })
+                       ASSERT_NE(message.find("did not pass verification"),
+                                 std::string::npos)
+                           << "Fail reason: " << message;
+                     })
         .done();
   }
 
