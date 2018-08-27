@@ -301,7 +301,7 @@ void Irohad::initTransactionCommandService() {
  */
 void Irohad::initQueryService() {
   auto query_processor = std::make_shared<QueryProcessorImpl>(
-      storage, std::make_unique<QueryExecutionImpl>(storage));
+      storage, storage);
 
   query_service = std::make_shared<::torii::QueryService>(query_processor);
 

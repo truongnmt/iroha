@@ -48,7 +48,7 @@ namespace iroha {
 
     QueryProcessorImpl::QueryProcessorImpl(
         std::shared_ptr<ametsuchi::Storage> storage,
-        std::shared_ptr<QueryExecution> qry_exec)
+        std::shared_ptr<ametsuchi::QueryExecutorFactory> qry_exec)
         : storage_(storage), qry_exec_(qry_exec) {
       storage_->on_commit().subscribe(
           [this](std::shared_ptr<shared_model::interface::Block> block) {
@@ -81,7 +81,9 @@ namespace iroha {
         return buildStatefulError(qry.hash());
       }
 
-      return qry_exec_->validateAndExecute(qry);
+      return qry_exec_->createQueryExecutor() | [&qry](const auto &executor) {
+        return executor->validateAndExecute(qry);
+      };
     }
 
     rxcpp::observable<
@@ -93,7 +95,9 @@ namespace iroha {
         return rxcpp::observable<>::just(response);
       }
 
-      if (not qry_exec_->validate(qry)) {
+      auto exec = qry_exec_->createQueryExecutor();
+      if (not exec or not (exec |
+          [&qry](const auto &executor) { return executor->validate(qry); })) {
         auto response = buildBlocksQueryError("Stateful invalid");
         return rxcpp::observable<>::just(response);
       }

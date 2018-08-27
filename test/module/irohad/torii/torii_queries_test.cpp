@@ -14,6 +14,7 @@
 #include "builders/protobuf/common_objects/proto_asset_builder.hpp"
 #include "builders/protobuf/queries.hpp"
 #include "module/shared_model/builders/protobuf/test_query_builder.hpp"
+#include "module/shared_model/builders/protobuf/test_query_response_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
 
 #include "execution/query_execution_impl.hpp"
@@ -45,15 +46,19 @@ class ToriiQueriesTest : public testing::Test {
     runner = std::make_unique<ServerRunner>(ip + ":0");
     wsv_query = std::make_shared<MockWsvQuery>();
     block_query = std::make_shared<MockBlockQuery>();
+    query_executor = std::make_shared<MockQueryExecutor>();
     storage = std::make_shared<MockStorage>();
 
     //----------- Query Service ----------
 
     EXPECT_CALL(*storage, getWsvQuery()).WillRepeatedly(Return(wsv_query));
     EXPECT_CALL(*storage, getBlockQuery()).WillRepeatedly(Return(block_query));
+    EXPECT_CALL(*storage, createQueryExecutor())
+        .WillRepeatedly(Return(boost::make_optional(
+            std::shared_ptr<QueryExecutor>(query_executor))));
 
-    auto qpi = std::make_shared<iroha::torii::QueryProcessorImpl>(
-        storage, std::make_shared<iroha::QueryExecutionImpl>(storage));
+    auto qpi =
+        std::make_shared<iroha::torii::QueryProcessorImpl>(storage, storage);
 
     //----------- Server run ----------------
     runner->append(std::make_unique<torii::QueryService>(qpi))
@@ -77,6 +82,7 @@ class ToriiQueriesTest : public testing::Test {
 
   std::shared_ptr<MockWsvQuery> wsv_query;
   std::shared_ptr<MockBlockQuery> block_query;
+  std::shared_ptr<MockQueryExecutor> query_executor;
   std::shared_ptr<MockStorage> storage;
 
   const std::string ip = "127.0.0.1";
@@ -147,8 +153,6 @@ TEST_F(ToriiQueriesTest, FindAccountWhenNoGrantPermissions) {
 
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator))
-      .WillRepeatedly(Return(boost::none));
 
   iroha::protocol::QueryResponse response;
 
@@ -160,6 +164,17 @@ TEST_F(ToriiQueriesTest, FindAccountWhenNoGrantPermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r =
+      clone(TestQueryResponseBuilder()
+                .errorQueryResponse<
+                    shared_model::interface::StatefulFailedErrorResponse>()
+                .queryHash(model_query.hash())
+                .build())
+          .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -185,15 +200,7 @@ TEST_F(ToriiQueriesTest, FindAccountWhenHasReadPermissions) {
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
 
-  // Should be called once, after successful stateful validation
-  EXPECT_CALL(*wsv_query, getAccount(accountB->accountId()))
-      .WillOnce(Return(accountB));
-
   std::vector<std::string> roles = {"user"};
-  EXPECT_CALL(*wsv_query, getAccountRoles(_)).WillRepeatedly(Return(roles));
-  EXPECT_CALL(*wsv_query, getRolePermissions(_))
-      .WillOnce(Return(shared_model::interface::RolePermissionSet(
-          {shared_model::interface::permissions::Role::kGetAllAccounts})));
 
   iroha::protocol::QueryResponse response;
 
@@ -205,6 +212,19 @@ TEST_F(ToriiQueriesTest, FindAccountWhenHasReadPermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r =
+      clone(TestQueryResponseBuilder()
+                .accountResponse(
+                    *std::static_pointer_cast<shared_model::proto::Account>(
+                        accountB),
+                    roles)
+                .queryHash(model_query.hash())
+                .build())
+          .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -230,15 +250,9 @@ TEST_F(ToriiQueriesTest, FindAccountWhenHasRolePermission) {
       shared_model::proto::AccountBuilder().accountId("accountA").build());
 
   auto creator = "a@domain";
-  EXPECT_CALL(*wsv_query, getAccount(creator)).WillOnce(Return(account));
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
   std::vector<std::string> roles = {"test"};
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator))
-      .WillRepeatedly(Return(roles));
-  shared_model::interface::RolePermissionSet perm;
-  perm.set(Role::kGetMyAccount);
-  EXPECT_CALL(*wsv_query, getRolePermissions("test")).WillOnce(Return(perm));
 
   iroha::protocol::QueryResponse response;
 
@@ -250,6 +264,19 @@ TEST_F(ToriiQueriesTest, FindAccountWhenHasRolePermission) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r =
+      clone(TestQueryResponseBuilder()
+                .accountResponse(
+                    *std::static_pointer_cast<shared_model::proto::Account>(
+                        account),
+                    roles)
+                .queryHash(model_query.hash())
+                .build())
+          .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -279,11 +306,6 @@ TEST_F(ToriiQueriesTest, FindAccountAssetWhenNoGrantPermissions) {
 
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator))
-      .WillOnce(Return(boost::none));
-
-  EXPECT_CALL(*wsv_query, getAccountAsset(_, _))
-      .Times(0);  // won't be called due to failed stateful validation
 
   iroha::protocol::QueryResponse response;
 
@@ -295,6 +317,17 @@ TEST_F(ToriiQueriesTest, FindAccountAssetWhenNoGrantPermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r =
+      clone(TestQueryResponseBuilder()
+                .errorQueryResponse<
+                    shared_model::interface::StatefulFailedErrorResponse>()
+                .queryHash(model_query.hash())
+                .build())
+          .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -330,15 +363,6 @@ TEST_F(ToriiQueriesTest, FindAccountAssetWhenHasRolePermissions) {
   auto creator = "a@domain";
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
-  std::vector<std::string> roles = {"test"};
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator)).WillOnce(Return(roles));
-  shared_model::interface::RolePermissionSet perm;
-  perm.set(Role::kGetMyAccAst);
-  EXPECT_CALL(*wsv_query, getRolePermissions("test")).WillOnce(Return(perm));
-  EXPECT_CALL(*wsv_query, getAccountAssets(_))
-      .WillOnce(Return(
-          std::vector<std::shared_ptr<shared_model::interface::AccountAsset>>(
-              {account_asset})));
 
   iroha::protocol::QueryResponse response;
 
@@ -350,6 +374,19 @@ TEST_F(ToriiQueriesTest, FindAccountAssetWhenHasRolePermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  std::vector<shared_model::proto::AccountAsset> assets = {
+      *std::static_pointer_cast<shared_model::proto::AccountAsset>(
+          account_asset)};
+
+  auto *r = clone(TestQueryResponseBuilder()
+                      .accountAssetResponse(assets)
+                      .queryHash(model_query.hash())
+                      .build())
+                .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -391,8 +428,6 @@ TEST_F(ToriiQueriesTest, FindSignatoriesWhenNoGrantPermissions) {
   auto creator = "a@domain";
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator))
-      .WillOnce(Return(boost::none));
 
   iroha::protocol::QueryResponse response;
 
@@ -404,6 +439,17 @@ TEST_F(ToriiQueriesTest, FindSignatoriesWhenNoGrantPermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r =
+      clone(TestQueryResponseBuilder()
+                .errorQueryResponse<
+                    shared_model::interface::StatefulFailedErrorResponse>()
+                .queryHash(model_query.hash())
+                .build())
+          .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -430,12 +476,6 @@ TEST_F(ToriiQueriesTest, FindSignatoriesHasRolePermissions) {
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
 
-  std::vector<std::string> roles = {"test"};
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator)).WillOnce(Return(roles));
-  shared_model::interface::RolePermissionSet perm;
-  perm.set(Role::kGetMySignatories);
-  EXPECT_CALL(*wsv_query, getRolePermissions("test")).WillOnce(Return(perm));
-
   iroha::protocol::QueryResponse response;
 
   auto model_query = shared_model::proto::QueryBuilder()
@@ -446,6 +486,15 @@ TEST_F(ToriiQueriesTest, FindSignatoriesHasRolePermissions) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r = clone(TestQueryResponseBuilder()
+                      .signatoriesResponse(signatories)
+                      .queryHash(model_query.hash())
+                      .build())
+                .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);
@@ -477,23 +526,17 @@ TEST_F(ToriiQueriesTest, FindTransactionsWhenValid) {
       shared_model::proto::AccountBuilder().accountId("accountA").build();
   auto creator = "a@domain";
   std::vector<wTransaction> txs;
+  std::vector<shared_model::proto::Transaction> proto_txs;
   for (size_t i = 0; i < 3; ++i) {
-    std::shared_ptr<shared_model::interface::Transaction> current =
-        clone(TestTransactionBuilder()
-                  .creatorAccountId(account.accountId())
-                  .build());
+    std::shared_ptr<shared_model::interface::Transaction> current = clone(
+        TestTransactionBuilder().creatorAccountId(account.accountId()).build());
     txs.push_back(current);
+    proto_txs.push_back(
+        *std::static_pointer_cast<shared_model::proto::Transaction>(current));
   }
 
   EXPECT_CALL(*wsv_query, getSignatories(creator))
       .WillRepeatedly(Return(signatories));
-  std::vector<std::string> roles = {"test"};
-  EXPECT_CALL(*wsv_query, getAccountRoles(creator)).WillOnce(Return(roles));
-  shared_model::interface::RolePermissionSet perm;
-  perm.set(Role::kGetMyAccTxs);
-  EXPECT_CALL(*wsv_query, getRolePermissions("test")).WillOnce(Return(perm));
-  EXPECT_CALL(*block_query, getAccountTransactions(creator))
-      .WillOnce(Return(txs));
 
   iroha::protocol::QueryResponse response;
 
@@ -505,6 +548,15 @@ TEST_F(ToriiQueriesTest, FindTransactionsWhenValid) {
                          .build()
                          .signAndAddSignature(pair)
                          .finish();
+
+  auto *r = clone(TestQueryResponseBuilder()
+                      .transactionsResponse(proto_txs)
+                      .queryHash(model_query.hash())
+                      .build())
+                .release();
+
+  EXPECT_CALL(*query_executor, validateAndExecute_(_))
+      .WillRepeatedly(Return(r));
 
   auto stat = torii_utils::QuerySyncClient(ip, port).Find(
       model_query.getTransport(), response);

@@ -69,6 +69,13 @@ target_link_libraries(postgres_executor_test
     libs_common
     )
 
+addtest(postgres_query_executor_test postgres_query_executor_test.cpp)
+target_link_libraries(postgres_query_executor_test
+    integration_framework
+    ametsuchi
+    libs_common
+    )
+
 add_library(ametsuchi_fixture INTERFACE)
 target_link_libraries(ametsuchi_fixture INTERFACE
     integration_framework_config_helper

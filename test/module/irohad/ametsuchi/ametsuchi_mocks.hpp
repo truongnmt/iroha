@@ -264,6 +264,8 @@ namespace iroha {
      public:
       MOCK_CONST_METHOD0(getWsvQuery, std::shared_ptr<WsvQuery>(void));
       MOCK_CONST_METHOD0(getBlockQuery, std::shared_ptr<BlockQuery>(void));
+      MOCK_CONST_METHOD0(getQueryExecutor,
+                         std::shared_ptr<QueryExecutor>(void));
       MOCK_METHOD0(
           createTemporaryWsv,
           expected::Result<std::unique_ptr<TemporaryWsv>, std::string>(void));
@@ -277,6 +279,9 @@ namespace iroha {
       MOCK_CONST_METHOD0(
           createOsPersistentState,
           boost::optional<std::shared_ptr<OrderingServicePersistentState>>());
+      MOCK_CONST_METHOD0(
+          createQueryExecutor,
+          boost::optional<std::shared_ptr<QueryExecutor>>());
       MOCK_METHOD1(doCommit, void(MutableStorage *storage));
       MOCK_METHOD1(insertBlock, bool(const shared_model::interface::Block &));
       MOCK_METHOD1(insertBlocks,
@@ -323,6 +328,20 @@ namespace iroha {
           createOsPersistentState,
           boost::optional<std::shared_ptr<OrderingServicePersistentState>>());
     };
+
+    class MockQueryExecutor : public QueryExecutor {
+     public:
+      MOCK_METHOD1(validateAndExecute_,
+                   shared_model::interface::QueryResponse *(
+                       const shared_model::interface::Query &));
+      QueryExecutorResult validateAndExecute(
+          const shared_model::interface::Query &q) override {
+        return QueryExecutorResult(validateAndExecute_(q));
+      }
+      MOCK_METHOD1(validate,
+                   bool(const shared_model::interface::BlocksQuery &));
+    };
+
   }  // namespace ametsuchi
 }  // namespace iroha
 

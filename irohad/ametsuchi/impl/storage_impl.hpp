@@ -69,6 +69,9 @@ namespace iroha {
       boost::optional<std::shared_ptr<OrderingServicePersistentState>>
       createOsPersistentState() const override;
 
+      boost::optional<std::shared_ptr<QueryExecutor>>
+      createQueryExecutor() const override;
+
       /**
        * Insert block without validation
        * @param blocks - block for insertion
