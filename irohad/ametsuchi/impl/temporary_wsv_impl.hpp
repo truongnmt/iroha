@@ -46,7 +46,8 @@ namespace iroha {
 
       explicit TemporaryWsvImpl(std::unique_ptr<soci::session> sql,
                                 std::shared_ptr<shared_model::interface::CommonObjectsFactory>
-                                factory);
+                                factory,
+                                std::map<std::string, soci::statement *> statements);
 
       expected::Result<void, validation::CommandError> apply(
           const shared_model::interface::Transaction &,

@@ -160,8 +160,8 @@ namespace iroha {
       return (boost::format("%s: %s") % command_name % error_message).str();
     }
 
-    PostgresCommandExecutor::PostgresCommandExecutor(soci::session &sql)
-        : sql_(sql), do_validation_(true) {}
+    PostgresCommandExecutor::PostgresCommandExecutor(soci::session &sql, std::map<std::string, soci::statement *> statements)
+        : sql_(sql), do_validation_(true), statements_(statements) {}
 
     void PostgresCommandExecutor::setCreatorAccountId(
         const shared_model::interface::types::AccountIdType
@@ -179,65 +179,8 @@ namespace iroha {
       auto &asset_id = command.assetId();
       auto amount = command.amount().toStringRepr();
       auto precision = command.amount().precision();
-      boost::format cmd(R"(
-          WITH has_account AS (SELECT account_id FROM account
-                               WHERE account_id = :account_id LIMIT 1),
-               has_asset AS (SELECT asset_id FROM asset
-                             WHERE asset_id = :asset_id AND
-                             precision >= :precision LIMIT 1),
-               %s
-               amount AS (SELECT amount FROM account_has_asset
-                          WHERE asset_id = :asset_id AND
-                          account_id = :account_id LIMIT 1),
-               new_value AS (SELECT :new_value::decimal +
-                              (SELECT
-                                  CASE WHEN EXISTS
-                                      (SELECT amount FROM amount LIMIT 1) THEN
-                                      (SELECT amount FROM amount LIMIT 1)
-                                  ELSE 0::decimal
-                              END) AS value
-                          ),
-               inserted AS
-               (
-                  INSERT INTO account_has_asset(account_id, asset_id, amount)
-                  (
-                      SELECT :account_id, :asset_id, value FROM new_value
-                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
-                        EXISTS (SELECT value FROM new_value
-                                WHERE value < 2::decimal ^ (256 - :precision)
-                                LIMIT 1)
-                        %s
-                  )
-                  ON CONFLICT (account_id, asset_id) DO UPDATE
-                  SET amount = EXCLUDED.amount
-                  RETURNING (1)
-               )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
-              %s
-              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
-              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
-              WHEN NOT EXISTS (SELECT value FROM new_value
-                               WHERE value < 2::decimal ^ (256 - :precision)
-                               LIMIT 1) THEN 4
-              ELSE 5
-          END AS result;)");
-      if (do_validation_) {
-        cmd =
-            (cmd
-             % (boost::format(R"(has_perm AS (%s),)")
-                % checkAccountRolePermission(
-                      shared_model::interface::permissions::Role::kAddAssetQty))
-                   .str()
-             % "AND (SELECT * from has_perm)"
-             % "WHEN NOT (SELECT * from has_perm) THEN 1");
-      } else {
-        cmd = (cmd % "" % "" % "");
-      }
 
-      soci::statement st = sql_.prepare << cmd.str();
-      // clang-format on
+      soci::statement st(do_validation_ ? *statements_["addAssetQuantityWithValidation"] : *statements_["addAssetQuantityWithoutValidation"]);
 
       st.exchange(soci::use(account_id, "account_id"));
       st.exchange(soci::use(creator_account_id_, "role_account_id"));
@@ -1496,5 +1439,80 @@ namespace iroha {
       };
       return makeCommandResultByReturnedValue(st, "TransferAsset", message_gen);
     }
+
+    std::map<std::string, soci::statement *>
+    PostgresCommandExecutor::prepareStatements(soci::session &sql) {
+      std::map<std::string, soci::statement *> result;
+
+      std::string addAssetQuantityBase = R"(
+          WITH has_account AS (SELECT account_id FROM account
+                               WHERE account_id = :account_id LIMIT 1),
+               has_asset AS (SELECT asset_id FROM asset
+                             WHERE asset_id = :asset_id AND
+                             precision >= :precision LIMIT 1),
+               %s
+               amount AS (SELECT amount FROM account_has_asset
+                          WHERE asset_id = :asset_id AND
+                          account_id = :account_id LIMIT 1),
+               new_value AS (SELECT :new_value::decimal +
+                              (SELECT
+                                  CASE WHEN EXISTS
+                                      (SELECT amount FROM amount LIMIT 1) THEN
+                                      (SELECT amount FROM amount LIMIT 1)
+                                  ELSE 0::decimal
+                              END) AS value
+                          ),
+               inserted AS
+               (
+                  INSERT INTO account_has_asset(account_id, asset_id, amount)
+                  (
+                      SELECT :account_id, :asset_id, value FROM new_value
+                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
+                        EXISTS (SELECT value FROM new_value
+                                WHERE value < 2::decimal ^ (256 - :precision)
+                                LIMIT 1)
+                        %s
+                  )
+                  ON CONFLICT (account_id, asset_id) DO UPDATE
+                  SET amount = EXCLUDED.amount
+                  RETURNING (1)
+               )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
+              %s
+              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
+              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
+              WHEN NOT EXISTS (SELECT value FROM new_value
+                               WHERE value < 2::decimal ^ (256 - :precision)
+                               LIMIT 1) THEN 4
+              ELSE 5
+          END AS result;)";
+      std::string addAssetQuantityWithValidation =
+          (boost::format(addAssetQuantityBase)
+           % (boost::format(R"(has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kAddAssetQty))
+                 .str()
+           % "AND (SELECT * from has_perm)"
+           % "WHEN NOT (SELECT * from has_perm) THEN 1")
+              .str();
+      std::string addAssetQuantityWithoutValidation =
+          (boost::format(addAssetQuantityBase) % "" % "" % "").str();
+
+      soci::statement *st1 = new soci::statement(sql);
+      st1->prepare(addAssetQuantityWithValidation);
+
+      soci::statement *st2 = new soci::statement(sql);
+      st2->prepare(addAssetQuantityWithoutValidation);
+
+      result["addAssetQuantityWithValidation"] = st1;
+      result["addAssetQuantityWithoutValidation"] = st2;
+//      result["addAssetQuantityWithoutValidation"] =
+//          std::make_shared<soci::statement>(
+//              sql.prepare << addAssetQuantityWithoutValidation);
+
+      return result;
+    };
   }  // namespace ametsuchi
 }  // namespace iroha

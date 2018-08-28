@@ -12,6 +12,7 @@
 #include "ametsuchi/impl/mutable_storage_impl.hpp"
 #include "ametsuchi/impl/peer_query_wsv.hpp"
 #include "ametsuchi/impl/postgres_block_query.hpp"
+#include "ametsuchi/impl/postgres_command_executor.hpp"
 #include "ametsuchi/impl/postgres_wsv_query.hpp"
 #include "ametsuchi/impl/temporary_wsv_impl.hpp"
 #include "backend/protobuf/permissions.hpp"
@@ -20,6 +21,14 @@
 
 namespace iroha {
   namespace ametsuchi {
+
+    std::map<std::string, std::shared_ptr<soci::statement>>
+    &getPreparedStatements(
+        soci::session &sql,
+        std::shared_ptr<soci::connection_pool> pool,
+        size_t pool_size,
+        std::vector<std::map<std::string, std::shared_ptr<soci::statement>>>
+        statements);
 
     const char *kCommandExecutorError = "Cannot create CommandExecutorFactory";
     const char *kPsqlBroken = "Connection to PostgreSQL broken: %s";
@@ -47,6 +56,7 @@ namespace iroha {
           pool_size_(pool_size) {
       soci::session sql(*connection_);
       sql << init_;
+      prepareStatements();
     }
 
     expected::Result<std::unique_ptr<TemporaryWsv>, std::string>
@@ -56,9 +66,10 @@ namespace iroha {
         return expected::makeError("Connection was closed");
       }
       auto sql = std::make_unique<soci::session>(*connection_);
+      auto &statements = prepared_statements_[&(*sql)];
 
       return expected::makeValue<std::unique_ptr<TemporaryWsv>>(
-          std::make_unique<TemporaryWsvImpl>(std::move(sql), factory_));
+          std::make_unique<TemporaryWsvImpl>(std::move(sql), factory_, statements));
     }
 
     expected::Result<std::unique_ptr<MutableStorage>, std::string>
@@ -72,6 +83,7 @@ namespace iroha {
 
       auto sql = std::make_unique<soci::session>(*connection_);
       auto block_result = getBlockQuery()->getTopBlock();
+      auto &statements = prepared_statements_[&(*sql)];
       return expected::makeValue<std::unique_ptr<MutableStorage>>(
           std::make_unique<MutableStorageImpl>(
               block_result.match(
@@ -83,7 +95,8 @@ namespace iroha {
                     return shared_model::interface::types::HashType("");
                   }),
               std::move(sql),
-              factory_));
+              factory_,
+              statements));
     }
 
     boost::optional<std::shared_ptr<PeerQuery>> StorageImpl::createPeerQuery()
@@ -183,6 +196,14 @@ namespace iroha {
         return;
       }
 
+      // Drop prepared statements
+//      auto i = 0;
+//      for (auto &m : prepared_statements_) {
+//        m.second.clear();
+//        i++;
+//      }
+
+
       if (auto dbname = postgres_options_.dbname()) {
         auto &db = dbname.value();
         std::unique_lock<std::shared_timed_mutex> lock(drop_mutex);
@@ -190,6 +211,10 @@ namespace iroha {
         std::vector<std::shared_ptr<soci::session>> connections;
         for (size_t i = 0; i < pool_size_; i++) {
           connections.push_back(std::make_shared<soci::session>(*connection_));
+          for (auto &m : prepared_statements_[&(*connections[i])]) {
+            delete m.second;
+          }
+          prepared_statements_[&(*connections[i])].clear();
           connections[i]->close();
         }
         connections.clear();
@@ -259,6 +284,13 @@ namespace iroha {
         session.open(soci::postgresql, options_str);
       }
       return expected::makeValue(pool);
+    };
+
+    void StorageImpl::prepareStatements() {
+      for (size_t i = 0; i != pool_size_; i++) {
+        soci::session &session = connection_->at(i);
+        prepared_statements_[&session] = PostgresCommandExecutor::prepareStatements(session);
+      }
     };
 
     expected::Result<std::shared_ptr<StorageImpl>, std::string>

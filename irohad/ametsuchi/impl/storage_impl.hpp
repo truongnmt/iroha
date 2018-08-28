@@ -109,6 +109,8 @@ namespace iroha {
                       converter,
                   size_t pool_size);
 
+      void prepareStatements();
+
       /**
        * Folder with raw blocks
        */
@@ -134,6 +136,9 @@ namespace iroha {
       mutable std::shared_timed_mutex drop_mutex;
 
       size_t pool_size_;
+
+      std::map<soci::session *, std::map<std::string, soci::statement *>>
+          prepared_statements_;
 
      protected:
       static const std::string &drop_;

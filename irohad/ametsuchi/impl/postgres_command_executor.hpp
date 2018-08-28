@@ -14,7 +14,7 @@ namespace iroha {
 
     class PostgresCommandExecutor : public CommandExecutor {
      public:
-      explicit PostgresCommandExecutor(soci::session &transaction);
+      explicit PostgresCommandExecutor(soci::session &transaction, std::map<std::string, soci::statement *> statements);
 
       void setCreatorAccountId(
           const shared_model::interface::types::AccountIdType
@@ -71,9 +71,13 @@ namespace iroha {
       CommandResult operator()(
           const shared_model::interface::TransferAsset &command) override;
 
+      static std::map<std::string, soci::statement *>
+      prepareStatements(soci::session &sql);
+
      private:
       soci::session &sql_;
       bool do_validation_;
+      std::map<std::string, soci::statement *> statements_;
 
       shared_model::interface::types::AccountIdType creator_account_id_;
     };

@@ -46,12 +46,14 @@ namespace iroha {
             std::make_shared<shared_model::proto::ProtoCommonObjectsFactory<
                 shared_model::validation::FieldValidator>>();
         query = std::make_unique<PostgresWsvQuery>(*sql, factory);
-        executor = std::make_unique<PostgresCommandExecutor>(*sql);
+        statements = PostgresCommandExecutor::prepareStatements(*sql);
+        executor = std::make_unique<PostgresCommandExecutor>(*sql, statements);
 
         *sql << init_;
       }
 
       void TearDown() override {
+        statements.clear();
         sql->close();
         AmetsuchiTest::TearDown();
       }
@@ -103,6 +105,7 @@ namespace iroha {
       std::unique_ptr<shared_model::interface::Domain> domain;
       std::unique_ptr<shared_model::interface::types::PubkeyType> pubkey;
 
+      std::map<std::string, soci::statement *> statements;
       std::unique_ptr<soci::session> sql;
 
       std::unique_ptr<shared_model::interface::Command> command;

@@ -66,6 +66,7 @@ option(SWIG_CSHARP  "Generate Swig C# bindings"      OFF)
 option(SWIG_NODE    "Generate Swig NodeJS"           OFF)
 option(USE_LIBIROHA "Use external model library"     OFF)
 
+SET(BENCHMARKING ON)
 
 if (NOT CMAKE_BUILD_TYPE)
   SET(CMAKE_BUILD_TYPE Debug)
