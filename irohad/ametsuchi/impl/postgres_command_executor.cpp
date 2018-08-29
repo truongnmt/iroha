@@ -65,9 +65,38 @@ namespace {
     }
   }
 
+  /**
+   * Executes sql query,
+   * which will have error message generated exception
+   * Assums that statement query returns 0 in case of success or error code
+   * @param result which can be received by calling execute_
+   * @param error_generator functions which must generate error message
+   * to be used as a return error.
+   * Functions are passed instead of string to avoid overhead of string
+   * construction in successful case.
+   * @return CommandResult with combined error message
+   * in case of result contains error
+   */
+  iroha::ametsuchi::CommandResult makeCommandResultByReturnedValue(
+      soci::session &sql,
+      std::string &&cmd,
+      const std::string &command_name,
+      std::vector<std::function<std::string()>> &error_generator) noexcept {
+    uint32_t result;
+    try {
+      sql << cmd, soci::into(result);
+      if (result != 0) {
+        return makeCommandError(error_generator[result - 1](), command_name);
+      }
+      return {};
+    } catch (std::exception &e) {
+      return makeCommandError(e.what(), command_name);
+    }
+  }
+
   std::string checkAccountRolePermission(
       shared_model::interface::permissions::Role permission,
-      const std::string &account_alias = "role_account_id") {
+      const std::string &account_alias = ":role_account_id") {
     const auto perm_str =
         shared_model::interface::RolePermissionSet({permission}).toBitstring();
     const auto bits = shared_model::interface::RolePermissionSet::size();
@@ -75,7 +104,7 @@ namespace {
           SELECT COALESCE(bit_or(rp.permission), '0'::bit(%1%))
           & '%2%' = '%2%' FROM role_has_permissions AS rp
               JOIN account_has_roles AS ar on ar.role_id = rp.role_id
-              WHERE ar.account_id = :%3%)")
+              WHERE ar.account_id = %3%)")
                          % bits % perm_str % account_alias)
                             .str();
     return query;
@@ -160,7 +189,8 @@ namespace iroha {
       return (boost::format("%s: %s") % command_name % error_message).str();
     }
 
-    PostgresCommandExecutor::PostgresCommandExecutor(soci::session &sql, std::map<std::string, soci::statement *> statements)
+    PostgresCommandExecutor::PostgresCommandExecutor(
+        soci::session &sql, std::map<std::string, soci::statement *> statements)
         : sql_(sql), do_validation_(true), statements_(statements) {}
 
     void PostgresCommandExecutor::setCreatorAccountId(
@@ -178,15 +208,17 @@ namespace iroha {
       auto &account_id = creator_account_id_;
       auto &asset_id = command.assetId();
       auto amount = command.amount().toStringRepr();
-      auto precision = command.amount().precision();
+      int precision = command.amount().precision();
 
-      soci::statement st(do_validation_ ? *statements_["addAssetQuantityWithValidation"] : *statements_["addAssetQuantityWithoutValidation"]);
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', %4%, '%5%')");
 
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(asset_id, "asset_id"));
-      st.exchange(soci::use(amount, "new_value"));
-      st.exchange(soci::use(precision, "precision"));
+      if (do_validation_) {
+        cmd = (cmd % "addAssetQuantityWithValidation");
+      } else {
+        cmd = (cmd % "addAssetQuantityWithoutValidation");
+      }
+
+      cmd = (cmd % account_id % asset_id % precision % amount);
 
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
@@ -201,7 +233,7 @@ namespace iroha {
           [] { return std::string("Summation overflows uint256"); },
       };
       return makeCommandResultByReturnedValue(
-          st, "AddAssetQuantity", message_gen);
+          sql_, cmd.str(), "AddAssetQuantity", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -1393,7 +1425,7 @@ namespace iroha {
                             kTransferMyAssets)
                   % checkAccountRolePermission(
                         shared_model::interface::permissions::Role::kReceive,
-                        "dest_account_id"))
+                        ":dest_account_id"))
                      .str()
                % R"( AND (SELECT * FROM has_perm))"
                % R"( AND (SELECT * FROM has_perm))"
@@ -1445,16 +1477,17 @@ namespace iroha {
       std::map<std::string, soci::statement *> result;
 
       std::string addAssetQuantityBase = R"(
+          PREPARE %s (text, text, int, text) AS
           WITH has_account AS (SELECT account_id FROM account
-                               WHERE account_id = :account_id LIMIT 1),
+                               WHERE account_id = $1 LIMIT 1),
                has_asset AS (SELECT asset_id FROM asset
-                             WHERE asset_id = :asset_id AND
-                             precision >= :precision LIMIT 1),
+                             WHERE asset_id = $2 AND
+                             precision >= $3 LIMIT 1),
                %s
                amount AS (SELECT amount FROM account_has_asset
-                          WHERE asset_id = :asset_id AND
-                          account_id = :account_id LIMIT 1),
-               new_value AS (SELECT :new_value::decimal +
+                          WHERE asset_id = $2 AND
+                          account_id = $1 LIMIT 1),
+               new_value AS (SELECT $4::decimal +
                               (SELECT
                                   CASE WHEN EXISTS
                                       (SELECT amount FROM amount LIMIT 1) THEN
@@ -1466,11 +1499,11 @@ namespace iroha {
                (
                   INSERT INTO account_has_asset(account_id, asset_id, amount)
                   (
-                      SELECT :account_id, :asset_id, value FROM new_value
+                      SELECT $1, $2, value FROM new_value
                       WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
                         EXISTS (SELECT * FROM has_asset LIMIT 1) AND
                         EXISTS (SELECT value FROM new_value
-                                WHERE value < 2::decimal ^ (256 - :precision)
+                                WHERE value < 2::decimal ^ (256 - $3)
                                 LIMIT 1)
                         %s
                   )
@@ -1484,33 +1517,28 @@ namespace iroha {
               WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
               WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
               WHEN NOT EXISTS (SELECT value FROM new_value
-                               WHERE value < 2::decimal ^ (256 - :precision)
+                               WHERE value < 2::decimal ^ (256 - $3)
                                LIMIT 1) THEN 4
               ELSE 5
           END AS result;)";
       std::string addAssetQuantityWithValidation =
           (boost::format(addAssetQuantityBase)
+           % "addAssetQuantityWithValidation"
            % (boost::format(R"(has_perm AS (%s),)")
               % checkAccountRolePermission(
-                    shared_model::interface::permissions::Role::kAddAssetQty))
+                    shared_model::interface::permissions::Role::kAddAssetQty,
+                    "$1"))
                  .str()
            % "AND (SELECT * from has_perm)"
            % "WHEN NOT (SELECT * from has_perm) THEN 1")
               .str();
       std::string addAssetQuantityWithoutValidation =
-          (boost::format(addAssetQuantityBase) % "" % "" % "").str();
+          (boost::format(addAssetQuantityBase)
+           % "addAssetQuantityWithoutValidation" % "" % "" % "")
+              .str();
 
-      soci::statement *st1 = new soci::statement(sql);
-      st1->prepare(addAssetQuantityWithValidation);
-
-      soci::statement *st2 = new soci::statement(sql);
-      st2->prepare(addAssetQuantityWithoutValidation);
-
-      result["addAssetQuantityWithValidation"] = st1;
-      result["addAssetQuantityWithoutValidation"] = st2;
-//      result["addAssetQuantityWithoutValidation"] =
-//          std::make_shared<soci::statement>(
-//              sql.prepare << addAssetQuantityWithoutValidation);
+      sql << addAssetQuantityWithValidation;
+      sql << addAssetQuantityWithoutValidation;
 
       return result;
     };
