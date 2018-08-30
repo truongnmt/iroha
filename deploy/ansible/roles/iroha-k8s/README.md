@@ -1,9 +1,9 @@
 # iroha-k8s role
-This role is used for generating Iroha node configuration files and keys. They are meant to be deployed in a cluster. It also contains Kubernetes service and pod definitions file that deploys Iroha cluster (that is subject for manual setup).
+This role is used for generating Iroha node configuration files and keys. They are meant to be deployed in a cluster. It also contains Kubernetes service and pod definitions file that deploys Iroha cluster.
 
 ## Requirements
 - Python3
-- ed25519-cli for key generation. Statically linked binary (for x86_64 platform) can be found in jenkins/k8s-caliper-ci directory. You can also compile it yourself: https://github.com/Warchant/ed25519-cli.
+- ed25519-cli for key generation. Statically linked binary (for x86_64 platform) is already bundled in iroha-k8s Ansible role. Check out [ed25519-cli](https://github.com/Warchant/ed25519-cli) repo for compilation guide for other platforms.
 
 ## Generating configs
 ```
