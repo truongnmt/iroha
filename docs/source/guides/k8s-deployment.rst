@@ -9,7 +9,7 @@ Prerequisites
  * boto3
  * Ansible 2.4+
 
-You do not need the items below if you already have a working Kubernetes (k8s) cluster. You can skip to "Generating Iroha configs" chapter (INSERT LINK HERE).
+You do not need the items below if you already have a working Kubernetes (k8s) cluster. You can skip to `Generating Iroha configs`_ chapter.
  * Terraform 0.11.8+
  * AWS account for deploying a k8s cluster on EC2
 
@@ -29,12 +29,12 @@ Checkout the source tree from Github:
     git clone https://github.com/hyperledger/iroha && cd iroha
 
 Setting up cloud infrastructure
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 We use Hashicorp's Terraform infrastructure management tool for automated deployment of AWS EC2 nodes in multiple regions. `Kubespray <https://github.com/kubernetes-incubator/kubespray>`__ Ansible module is used for setting up a production-grade k8s cluster.
 
 Terraform module creates 3 AWS instances in 3 different regions: eu-west-1, eu-west-2, eu-west-3 by default. Instance type is *c5.large*. There is a separate VPC created in every region. All created VPCs are then connected using VPC peering connection. That is to create a seamless network for k8s cluster.
 
-There are several configurable options: number of nodes in each region and its role in k8s cluster (kube-master or kube-node). They can be set either in *variables.tf* file or via environment variables (using the same variable name but prefixed with TF_VAR_. See more in `Terraform docs <https://www.terraform.io/intro/getting-started/variables.html#from-environment-variables>`__). More options can be configured by tuning parameters in module's *variables.tf* file.
+There are several configurable options: number of nodes in each region and its role in k8s cluster (kube-master or kube-node). They can be set either in *variables.tf* file or via environment variables (using the same variable name but prefixed with TF_VAR. See more in `Terraform docs <https://www.terraform.io/intro/getting-started/variables.html#from-environment-variables>`__). More options can be configured by tuning parameters in module's *variables.tf* file.
 
 You must set up SSH key in *deploy/tf/k8s/variables.tf* as well. Replace public key with your own. It will added on each created EC2 instance.
 
@@ -85,7 +85,7 @@ Upon successful completion you will have working k8s cluster.
 
 Generating Iroha configs
 ^^^^^^^^^^^^^^^^^^^^^^^^
-In order for Iroha to work properly it requires to generate a key pair for each node, genesis block and configuration file. This is usually a tedious and error-prone procedure, especially for a large number of nodes. We automated it with Ansible role. You can skip to 'Deploying Iroha on the cluster' (INSERT LINK HERE) chapter if you want to quick start using default configs for k8s cluster with 4 Iroha replicas.
+In order for Iroha to work properly it requires to generate a key pair for each node, genesis block and configuration file. This is usually a tedious and error-prone procedure, especially for a large number of nodes. We automated it with Ansible role. You can skip to `Deploying Iroha on the cluster`_ chapter if you want to quick start using default configs for k8s cluster with 4 Iroha replicas.
 
 Generate configuration files for *N* Iroha nodes. *replicas* variable controls the number of *N*:
 
@@ -101,8 +101,6 @@ Make sure you have configuration files in *deploy/ansible/roles/iroha-k8s/files*
 
 There are two options for managing k8s cluster: logging into either of master node and executing commands there or configure remote management. We will cover the second option here as the first one is trivial.
 
-Setting up cluster remote control
----------------------------------
 In case you set up cluster using Kubespray, you can find *admin.conf* file on either of master node in */etc/kubernetes* directory. Copy this file on the control machine (the one you will be running *kubectl* command from). Make sure *server* parameter in this file points to external IP address or DNS name of a master node. Usually, there is a private IP address of the node (in case of AWS). Make sure *kubectl* utility is installed (`check out the docs <https://kubernetes.io/docs/tasks/tools/install-kubectl/>`__ for instructions).
 
 Replace the default *kubectl* configuration:
