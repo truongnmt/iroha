@@ -8,8 +8,10 @@ Prerequisites
  * Python 3.3+
  * boto3
  * Ansible 2.4+
+ * *ed25519-cli* utility for key generation. Statically linked binary (for x86_64 platform) can be found in deploy/ansible/playbooks/iroha-k8s/scripts directory. You may need to `compile it yourself <https://github.com/Warchant/ed25519-cli>`__.
 
 You do not need the items below if you already have a working Kubernetes (k8s) cluster. You can skip to `Generating Iroha configs`_ chapter.
+
  * Terraform 0.11.8+
  * AWS account for deploying a k8s cluster on EC2
 
@@ -56,7 +58,7 @@ Review the execution plan and type *yes* to approve. Upon completion you should 
 
     Apply complete! Resources: 39 added, 0 changed, 0 destroyed.
 
-We are now ready to deploy k8s cluster. Wait a couple of minutes before instances are ready.
+We are now ready to deploy k8s cluster. Wait a couple of minutes before instances are initialized.
 
 Setting up k8s cluster
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -91,7 +93,8 @@ Generate configuration files for *N* Iroha nodes. *replicas* variable controls t
 
 .. code-block:: shell
 
-    ansible-playbook -e 'replicas=7' deploy/ansible/playbooks/iroha-k8s/iroha-deploy.yml
+    pushd deploy/ansible && ansible-playbook -e 'replicas=7' playbooks/iroha-k8s/iroha-deploy.yml
+    popd
 
 You should find files created in *deploy/ansible/roles/iroha-k8s/files/conf*.
 
@@ -111,21 +114,20 @@ Replace the default *kubectl* configuration:
 
 We can now control the remote k8s cluster
 
-^^^
 *k8s-iroha.yaml* pod specification file requires to create a *config-map* first. This is a special resource that is mounted into each pod, and contains keys and configuration files required to run Iroha.
 
 .. code-block:: shell
 
-    kubectl create configmap iroha-config --from-file=ansible/roles/iroha-k8s/files/conf/
+    kubectl create configmap iroha-config --from-file=deploy/ansible/roles/iroha-k8s/files/conf/
 
-.. Attention:: We store all the keys in a single *config-map*. This greatly simplifies deployment, but suits only for proof-of-concept purposes as each node would have an access to private keys of others. You may want to use the separate *config-map* achieving a more secure deployment.
+.. Attention:: We store all the keys in a single *config-map*. This greatly simplifies the deployment, but suits only for proof-of-concept purposes as each node would have an access to private keys of others.
 
 Deploy Iroha network pod specification:
 
 .. code-block:: shell
 
-    kubectl create -f ansible/roles/iroha-k8s/files/k8s-iroha.yaml
+    kubectl create -f deploy/ansible/roles/iroha-k8s/files/k8s-iroha.yaml
 
 Wait a moment before each node downloads and starts Docker containers. Executing *kubectl get pods* command should eventually return a list of deployed pods each in *Running* state.
 
-.. Hint:: Pods do not expose ports externally. You need to connect to each Iroha instance by its hostname (iroha-0, iroha-1, etc). For that you have to have a running pod in the same network.
+.. Hint:: Pods do not expose ports externally. You need to connect to Iroha instance by its hostname (iroha-0, iroha-1, etc). For that you have to have a running pod in the same network.
