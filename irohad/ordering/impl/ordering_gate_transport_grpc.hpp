@@ -53,7 +53,8 @@ namespace iroha {
               transaction) override;
 
       void propagateBatch(
-          const shared_model::interface::TransactionBatch &batch) override;
+          std::shared_ptr<shared_model::interface::TransactionBatch> batch)
+          override;
 
       void subscribe(std::shared_ptr<iroha::network::OrderingGateNotification>
                          subscriber) override;

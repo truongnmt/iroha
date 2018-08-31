@@ -52,13 +52,14 @@ namespace iroha {
     }
 
     void OrderingGateImpl::propagateBatch(
-        const shared_model::interface::TransactionBatch &batch) const {
-      if (batch.transactions().empty()) {
+        std::shared_ptr<shared_model::interface::TransactionBatch> batch)
+        const {
+      if (batch->transactions().empty()) {
         log_->warn("trying to propagate empty batch");
         return;
       }
       log_->info("propagate batch, account_id: {}",
-                 batch.transactions().front()->creatorAccountId());
+                 batch->transactions().front()->creatorAccountId());
 
       transport_->propagateBatch(batch);
     }

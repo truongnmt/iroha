@@ -22,13 +22,14 @@ namespace shared_model {
                          std::vector<std::shared_ptr<Transaction>>,
                          interface::types::HashType::Hasher>
           extracted_batches;
-      std::vector<TransactionBatch> batches;
+      types::BatchesCollectionType batches;
 
       const auto &transaction_validator = validator.getTransactionValidator();
 
       auto insert_batch =
           [&batches](const iroha::expected::Value<TransactionBatch> &value) {
-            batches.push_back(value.value);
+            batches.push_back(
+                std::make_shared<TransactionBatch>(std::move(value.value)));
           };
 
       validation::Answer result;
@@ -88,11 +89,11 @@ namespace shared_model {
         types::SharedTxsCollectionType result;
         auto transactions_amount = 0u;
         for (const auto &batch : batches_) {
-          transactions_amount += batch.transactions().size();
+          transactions_amount += batch->transactions().size();
         }
         result.reserve(transactions_amount);
         for (const auto &batch : batches_) {
-          auto &transactions = batch.transactions();
+          auto &transactions = batch->transactions();
           std::copy(transactions.begin(),
                     transactions.end(),
                     std::back_inserter(result));
@@ -110,7 +111,7 @@ namespace shared_model {
       return detail::PrettyStringBuilder()
           .init("TransactionSequence")
           .appendAll(batches_,
-                     [](const auto &batch) { return batch.toString(); })
+                     [](const auto &batch) { return batch->toString(); })
           .finalize();
     }
 

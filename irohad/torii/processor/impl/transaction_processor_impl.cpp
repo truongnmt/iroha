@@ -124,7 +124,7 @@ namespace iroha {
         log_->info("MST batch prepared");
         // TODO: 07/08/2018 @muratovv rework interface of pcs::propagate batch
         // and mst::propagate batch IR-1584
-        this->pcs_->propagate_batch(*batch);
+        this->pcs_->propagate_batch(batch);
       });
       mst_processor_->onExpiredBatches().subscribe([this](auto &&batch) {
         log_->info("MST batch {} is expired", batch->reducedHash().toString());
@@ -140,16 +140,14 @@ namespace iroha {
     }
 
     void TransactionProcessorImpl::batchHandle(
-        const shared_model::interface::TransactionBatch &transaction_batch)
-        const {
-      if (transaction_batch.hasAllSignatures()) {
+        std::shared_ptr<shared_model::interface::TransactionBatch>
+            transaction_batch) const {
+      if (transaction_batch->hasAllSignatures()) {
         pcs_->propagate_batch(transaction_batch);
       } else {
         // TODO: 07/08/2018 @muratovv rework interface of pcs::propagate batch
         // and mst::propagate batch IR-1584
-        mst_processor_->propagateBatch(
-            std::make_shared<shared_model::interface::TransactionBatch>(
-                transaction_batch));
+        mst_processor_->propagateBatch(transaction_batch);
       }
     }
 

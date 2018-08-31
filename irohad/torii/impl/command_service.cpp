@@ -103,7 +103,10 @@ namespace torii {
               single_batch_result.match(
                   [this](const iroha::expected::Value<
                          shared_model::interface::TransactionBatch> &value) {
-                    tx_processor_->batchHandle(value.value);
+                    tx_processor_->batchHandle(
+                        std::make_shared<
+                            shared_model::interface::TransactionBatch>(
+                            value.value));
                   },
                   [this](const auto &err) {
                     log_->warn("Transaction can't transformed to batch: {}",
@@ -152,7 +155,7 @@ namespace torii {
                     &tx_sequence) {
               for (const auto &batch : tx_sequence.value.batches()) {
                 tx_processor_->batchHandle(batch);
-                const auto &txs = batch.transactions();
+                const auto &txs = batch->transactions();
                 std::for_each(txs.begin(), txs.end(), [this](const auto &tx) {
                   auto tx_hash = tx->hash();
                   if (cache_->findItem(tx_hash) and tx->quorum() < 2) {
