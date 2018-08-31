@@ -137,9 +137,6 @@ namespace iroha {
 
       size_t pool_size_;
 
-      std::map<soci::session *, std::map<std::string, soci::statement *>>
-          prepared_statements_;
-
      protected:
       static const std::string &drop_;
       static const std::string &reset_;

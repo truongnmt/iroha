@@ -14,7 +14,7 @@ namespace iroha {
 
     class PostgresCommandExecutor : public CommandExecutor {
      public:
-      explicit PostgresCommandExecutor(soci::session &transaction, std::map<std::string, soci::statement *> statements);
+      explicit PostgresCommandExecutor(soci::session &transaction);
 
       void setCreatorAccountId(
           const shared_model::interface::types::AccountIdType
@@ -71,15 +71,31 @@ namespace iroha {
       CommandResult operator()(
           const shared_model::interface::TransferAsset &command) override;
 
-      static std::map<std::string, soci::statement *>
+      static void
       prepareStatements(soci::session &sql);
 
      private:
       soci::session &sql_;
       bool do_validation_;
-      std::map<std::string, soci::statement *> statements_;
 
       shared_model::interface::types::AccountIdType creator_account_id_;
+
+      static const std::string addAssetQuantityBase;
+      static const std::string addPeerBase;
+      static const std::string addSignatoryBase;
+      static const std::string appendRoleBase;
+      static const std::string createAccountBase;
+      static const std::string createAssetBase;
+      static const std::string createDomainBase;
+      static const std::string createRoleBase;
+      static const std::string detachRoleBase;
+      static const std::string grantPermissionBase;
+      static const std::string removeSignatoryBase;
+      static const std::string revokePermissionBase;
+      static const std::string setAccountDetailBase;
+      static const std::string setQuorumBase;
+      static const std::string subtractAssetQuantityBase;
+      static const std::string transferAssetBase;
     };
   }  // namespace ametsuchi
 }  // namespace iroha

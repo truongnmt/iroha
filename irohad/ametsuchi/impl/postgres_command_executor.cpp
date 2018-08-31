@@ -5,6 +5,7 @@
 
 #include "ametsuchi/impl/postgres_command_executor.hpp"
 
+#include <soci/postgresql/soci-postgresql.h>
 #include <boost/format.hpp>
 
 #include "ametsuchi/impl/soci_utils.hpp"
@@ -33,36 +34,6 @@ namespace {
       const std::string &command_name) noexcept {
     return iroha::expected::makeError(
         iroha::ametsuchi::CommandError{command_name, error_message});
-  }
-
-  /**
-   * Transforms soci statement to CommandResult,
-   * which will have error message generated exception
-   * Assums that statement query returns 0 in case of success or error code
-   * @param result which can be received by calling execute_
-   * @param error_generator functions which must generate error message
-   * to be used as a return error.
-   * Functions are passed instead of string to avoid overhead of string
-   * construction in successful case.
-   * @return CommandResult with combined error message
-   * in case of result contains error
-   */
-  iroha::ametsuchi::CommandResult makeCommandResultByReturnedValue(
-      soci::statement &st,
-      const std::string &command_name,
-      std::vector<std::function<std::string()>> &error_generator) noexcept {
-    uint32_t result;
-    st.exchange(soci::into(result));
-    st.define_and_bind();
-    try {
-      st.execute(true);
-      if (result != 0) {
-        return makeCommandError(error_generator[result - 1](), command_name);
-      }
-      return {};
-    } catch (std::exception &e) {
-      return makeCommandError(e.what(), command_name);
-    }
   }
 
   /**
@@ -111,7 +82,9 @@ namespace {
   }
 
   std::string checkAccountGrantablePermission(
-      shared_model::interface::permissions::Grantable permission) {
+      shared_model::interface::permissions::Grantable permission,
+      std::string creator_id = ":grantable_permittee_account_id",
+      std::string account_id = ":grantable_account_id") {
     const auto perm_str =
         shared_model::interface::GrantablePermissionSet({permission})
             .toBitstring();
@@ -119,30 +92,34 @@ namespace {
     std::string query = (boost::format(R"(
           SELECT COALESCE(bit_or(permission), '0'::bit(%1%))
           & '%2%' = '%2%' FROM account_has_grantable_permissions
-              WHERE account_id = :grantable_account_id AND
-              permittee_account_id = :grantable_permittee_account_id
-          )") % bits % perm_str)
+              WHERE account_id = %4% AND
+              permittee_account_id = %3%
+          )") % bits % perm_str
+                         % creator_id % account_id)
                             .str();
     return query;
   }
 
   std::string checkAccountHasRoleOrGrantablePerm(
       shared_model::interface::permissions::Role role,
-      shared_model::interface::permissions::Grantable grantable) {
+      shared_model::interface::permissions::Grantable grantable,
+      std::string creator_id = ":creator_id",
+      std::string account_id = ":account_id") {
     return (boost::format(R"(WITH
           has_role_perm AS (%s),
           has_grantable_perm AS (%s)
           SELECT CASE
                            WHEN (SELECT * FROM has_grantable_perm) THEN true
-                           WHEN (:creator_id = :account_id) THEN
+                           WHEN (%s = %s) THEN
                                CASE
                                    WHEN (SELECT * FROM has_role_perm) THEN true
                                    ELSE false
                                 END
                            ELSE false END
           )")
-            % checkAccountRolePermission(role)
-            % checkAccountGrantablePermission(grantable))
+            % checkAccountRolePermission(role, creator_id)
+            % checkAccountGrantablePermission(grantable, creator_id, account_id)
+            % creator_id % account_id)
         .str();
   }
 
@@ -185,13 +162,460 @@ namespace {
 namespace iroha {
   namespace ametsuchi {
 
+    const std::string PostgresCommandExecutor::addAssetQuantityBase = R"(
+          PREPARE %s (text, text, int, text) AS
+          WITH has_account AS (SELECT account_id FROM account
+                               WHERE account_id = $1 LIMIT 1),
+               has_asset AS (SELECT asset_id FROM asset
+                             WHERE asset_id = $2 AND
+                             precision >= $3 LIMIT 1),
+               %s
+               amount AS (SELECT amount FROM account_has_asset
+                          WHERE asset_id = $2 AND
+                          account_id = $1 LIMIT 1),
+               new_value AS (SELECT $4::decimal +
+                              (SELECT
+                                  CASE WHEN EXISTS
+                                      (SELECT amount FROM amount LIMIT 1) THEN
+                                      (SELECT amount FROM amount LIMIT 1)
+                                  ELSE 0::decimal
+                              END) AS value
+                          ),
+               inserted AS
+               (
+                  INSERT INTO account_has_asset(account_id, asset_id, amount)
+                  (
+                      SELECT $1, $2, value FROM new_value
+                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
+                        EXISTS (SELECT value FROM new_value
+                                WHERE value < 2::decimal ^ (256 - $3)
+                                LIMIT 1)
+                        %s
+                  )
+                  ON CONFLICT (account_id, asset_id) DO UPDATE
+                  SET amount = EXCLUDED.amount
+                  RETURNING (1)
+               )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
+              %s
+              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
+              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
+              WHEN NOT EXISTS (SELECT value FROM new_value
+                               WHERE value < 2::decimal ^ (256 - $3)
+                               LIMIT 1) THEN 4
+              ELSE 5
+          END AS result;)";
+
+    const std::string PostgresCommandExecutor::addPeerBase = R"(
+          PREPARE %s (text, text, text) AS
+          WITH
+          %s
+          inserted AS (
+              INSERT INTO peer(public_key, address)
+              (
+                  SELECT $2, $3
+                  %s
+              ) RETURNING (1)
+          )
+          SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+              %s
+              ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::addSignatoryBase = R"(
+          PREPARE %s (text, text, text) AS
+          WITH %s
+          insert_signatory AS
+          (
+              INSERT INTO signatory(public_key)
+              %s ON CONFLICT DO NOTHING RETURNING (1)
+          ),
+          has_signatory AS (SELECT * FROM signatory WHERE public_key = $3),
+          insert_account_signatory AS
+          (
+              INSERT INTO account_has_signatory(account_id, public_key)
+              (
+                  SELECT $2, $3 WHERE (EXISTS
+                  (SELECT * FROM insert_signatory) OR
+                  EXISTS (SELECT * FROM has_signatory))
+                  %s
+              )
+              RETURNING (1)
+          )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM insert_account_signatory) THEN 0
+              %s
+              WHEN EXISTS (SELECT * FROM insert_signatory) THEN 2
+              ELSE 3
+          END AS RESULT;)";
+
+    const std::string PostgresCommandExecutor::appendRoleBase = R"(
+            PREPARE %s (text, text, text) AS
+            WITH %s
+            inserted AS (
+                INSERT INTO account_has_roles(account_id, role_id)
+                (
+                    SELECT $2, $3 %s) RETURNING (1)
+            )
+            SELECT CASE
+                WHEN EXISTS (SELECT * FROM inserted) THEN 0
+                %s
+                ELSE 4
+            END AS result)";
+
+    const std::string PostgresCommandExecutor::createAccountBase = R"(
+          PREPARE %s (text, text, text, text) AS
+          WITH get_domain_default_role AS (SELECT default_role FROM domain
+                                           WHERE domain_id = $3),
+          %s
+          insert_signatory AS
+          (
+              INSERT INTO signatory(public_key)
+              (
+                  SELECT $4 WHERE EXISTS
+                  (SELECT * FROM get_domain_default_role)
+              ) ON CONFLICT DO NOTHING RETURNING (1)
+          ),
+          has_signatory AS (SELECT * FROM signatory WHERE public_key = $4),
+          insert_account AS
+          (
+              INSERT INTO account(account_id, domain_id, quorum, data)
+              (
+                  SELECT $2, $3, 1, '{}' WHERE (EXISTS
+                      (SELECT * FROM insert_signatory) OR EXISTS
+                      (SELECT * FROM has_signatory)
+                  ) AND EXISTS (SELECT * FROM get_domain_default_role)
+                  %s
+              ) RETURNING (1)
+          ),
+          insert_account_signatory AS
+          (
+              INSERT INTO account_has_signatory(account_id, public_key)
+              (
+                  SELECT $2, $4 WHERE
+                     EXISTS (SELECT * FROM insert_account)
+              )
+              RETURNING (1)
+          ),
+          insert_account_role AS
+          (
+              INSERT INTO account_has_roles(account_id, role_id)
+              (
+                  SELECT $2, default_role FROM get_domain_default_role
+                  WHERE EXISTS (SELECT * FROM get_domain_default_role)
+                    AND EXISTS (SELECT * FROM insert_account_signatory)
+              ) RETURNING (1)
+          )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM insert_account_role) THEN 0
+              %s
+              WHEN NOT EXISTS (SELECT * FROM account
+                               WHERE account_id = $2) THEN 2
+              WHEN NOT EXISTS (SELECT * FROM account_has_signatory
+                               WHERE account_id = $2
+                               AND public_key = $4) THEN 3
+              WHEN NOT EXISTS (SELECT * FROM account_has_roles
+                               WHERE account_id = account_id AND role_id = (
+                               SELECT default_role FROM get_domain_default_role)
+                               ) THEN 4
+              ELSE 5
+              END AS result)";
+
+    const std::string PostgresCommandExecutor::createAssetBase = R"(
+              PREPARE %s (text, text, text, int) AS
+              WITH %s
+              inserted AS
+              (
+                  INSERT INTO asset(asset_id, domain_id, precision, data)
+                  (
+                      SELECT $2, $3, $4, NULL
+                      %s
+                  ) RETURNING (1)
+              )
+              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+              %s
+              ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::createDomainBase = R"(
+              PREPARE %s (text, text, text) AS
+              WITH %s
+              inserted AS
+              (
+                  INSERT INTO domain(domain_id, default_role)
+                  (
+                      SELECT $2, $3
+                      %s
+                  ) RETURNING (1)
+              )
+              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+              %s
+              ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::createRoleBase = R"(
+          PREPARE %s (text, text, bit) AS
+          WITH %s
+          insert_role AS (INSERT INTO role(role_id)
+                              (SELECT $2
+                              %s) RETURNING (1)),
+          insert_role_permissions AS
+          (
+              INSERT INTO role_has_permissions(role_id, permission)
+              (
+                  SELECT $2, $3 WHERE EXISTS
+                      (SELECT * FROM insert_role)
+              ) RETURNING (1)
+          )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM insert_role_permissions) THEN 0
+              %s
+              WHEN EXISTS (SELECT * FROM role WHERE role_id = $2) THEN 1
+              ELSE 4
+              END AS result)";
+
+    const std::string PostgresCommandExecutor::detachRoleBase = R"(
+            PREPARE %s (text, text, text) AS
+            WITH %s
+            deleted AS
+            (
+              DELETE FROM account_has_roles
+              WHERE account_id=$2
+              AND role_id=$3
+              %s
+              RETURNING (1)
+            )
+            SELECT CASE WHEN EXISTS (SELECT * FROM deleted) THEN 0
+            %s
+            ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::grantPermissionBase = R"(
+          PREPARE %s (text, text, bit, bit) AS
+          WITH %s
+            inserted AS (
+              INSERT INTO account_has_grantable_permissions AS
+              has_perm(permittee_account_id, account_id, permission)
+              (SELECT $2, $1, $3 %s) ON CONFLICT
+              (permittee_account_id, account_id)
+              DO UPDATE SET permission=(SELECT has_perm.permission | $3
+              WHERE (has_perm.permission & $3) <> $3)
+              RETURNING (1)
+            )
+            SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+              %s
+              ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::removeSignatoryBase = R"(
+          PREPARE %s (text, text, text) AS
+          WITH
+          %s
+          delete_account_signatory AS (DELETE FROM account_has_signatory
+              WHERE account_id = $2
+              AND public_key = $3
+              %s
+              RETURNING (1)),
+          delete_signatory AS
+          (
+              DELETE FROM signatory WHERE public_key = $3 AND
+                  NOT EXISTS (SELECT 1 FROM account_has_signatory
+                              WHERE public_key = $3)
+                  AND NOT EXISTS (SELECT 1 FROM peer WHERE public_key = $3)
+              RETURNING (1)
+          )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM delete_account_signatory) THEN
+              CASE
+                  WHEN EXISTS (SELECT * FROM delete_signatory) THEN 0
+                  WHEN EXISTS (SELECT 1 FROM account_has_signatory
+                               WHERE public_key = $3) THEN 0
+                  WHEN EXISTS (SELECT 1 FROM peer
+                               WHERE public_key = $3) THEN 0
+                  ELSE 2
+              END
+              %s
+              ELSE 1
+          END AS result)";
+
+    const std::string PostgresCommandExecutor::revokePermissionBase = R"(
+          PREPARE %s (text, text, bit, bit) AS
+          WITH %s
+              inserted AS (
+                  UPDATE account_has_grantable_permissions as has_perm
+                  SET permission=(SELECT has_perm.permission & $4
+                  WHERE has_perm.permission & $3 = $3 AND
+                  has_perm.permittee_account_id=$2 AND
+                  has_perm.account_id=$1) WHERE
+                  permittee_account_id=$2 AND
+                  account_id=$1 %s
+                RETURNING (1)
+              )
+              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+                  %s
+                  ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::setAccountDetailBase = R"(
+          PREPARE %s (text, text, text[], text[], text, text) AS
+          WITH %s
+              inserted AS
+              (
+                  UPDATE account SET data = jsonb_set(
+                  CASE WHEN data ?$1 THEN data ELSE
+                  jsonb_set(data, $3, $6::jsonb) END,
+                  $4, $5::jsonb) WHERE account_id=$2 %s
+                  RETURNING (1)
+              )
+              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
+                  %s
+                  ELSE 2 END AS result)";
+
+    const std::string PostgresCommandExecutor::setQuorumBase = R"(
+          PREPARE %s (text, text, int) AS
+          WITH
+          %s
+          %s
+          updated AS (
+              UPDATE account SET quorum=$3
+              WHERE account_id=$2
+              %s
+              RETURNING (1)
+          )
+          SELECT CASE WHEN EXISTS (SELECT * FROM updated) THEN 0
+              %s
+              ELSE 4
+          END AS result)";
+
+    const std::string PostgresCommandExecutor::subtractAssetQuantityBase = R"(
+          PREPARE %s (text, text, int, text) AS
+          WITH %s
+               has_account AS (SELECT account_id FROM account
+                               WHERE account_id = $1 LIMIT 1),
+               has_asset AS (SELECT asset_id FROM asset
+                             WHERE asset_id = $2
+                             AND precision >= $3 LIMIT 1),
+               amount AS (SELECT amount FROM account_has_asset
+                          WHERE asset_id = $2
+                          AND account_id = $1 LIMIT 1),
+               new_value AS (SELECT
+                              (SELECT
+                                  CASE WHEN EXISTS
+                                      (SELECT amount FROM amount LIMIT 1)
+                                      THEN (SELECT amount FROM amount LIMIT 1)
+                                  ELSE 0::decimal
+                              END) - $4::decimal AS value
+                          ),
+               inserted AS
+               (
+                  INSERT INTO account_has_asset(account_id, asset_id, amount)
+                  (
+                      SELECT $1, $2, value FROM new_value
+                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
+                        EXISTS (SELECT value FROM new_value WHERE value >= 0 LIMIT 1)
+                        %s
+                  )
+                  ON CONFLICT (account_id, asset_id)
+                  DO UPDATE SET amount = EXCLUDED.amount
+                  RETURNING (1)
+               )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
+              %s
+              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
+              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
+              WHEN NOT EXISTS
+                  (SELECT value FROM new_value WHERE value >= 0 LIMIT 1) THEN 4
+              ELSE 5
+          END AS result)";
+
+    const std::string PostgresCommandExecutor::transferAssetBase = R"(
+          PREPARE %s (text, text, text, text, int, text) AS
+          WITH
+              %s
+              has_src_account AS (SELECT account_id FROM account
+                                   WHERE account_id = $2 LIMIT 1),
+              has_dest_account AS (SELECT account_id FROM account
+                                    WHERE account_id = $3
+                                    LIMIT 1),
+              has_asset AS (SELECT asset_id FROM asset
+                             WHERE asset_id = $4 AND
+                             precision >= $5 LIMIT 1),
+              src_amount AS (SELECT amount FROM account_has_asset
+                              WHERE asset_id = $4 AND
+                              account_id = $2 LIMIT 1),
+              dest_amount AS (SELECT amount FROM account_has_asset
+                               WHERE asset_id = $4 AND
+                               account_id = $3 LIMIT 1),
+              new_src_value AS (SELECT
+                              (SELECT
+                                  CASE WHEN EXISTS
+                                      (SELECT amount FROM src_amount LIMIT 1)
+                                      THEN
+                                      (SELECT amount FROM src_amount LIMIT 1)
+                                  ELSE 0::decimal
+                              END) - $6::decimal AS value
+                          ),
+              new_dest_value AS (SELECT
+                              (SELECT $6::decimal +
+                                  CASE WHEN EXISTS
+                                      (SELECT amount FROM dest_amount LIMIT 1)
+                                          THEN
+                                      (SELECT amount FROM dest_amount LIMIT 1)
+                                  ELSE 0::decimal
+                              END) AS value
+                          ),
+              insert_src AS
+              (
+                  INSERT INTO account_has_asset(account_id, asset_id, amount)
+                  (
+                      SELECT $2, $4, value
+                      FROM new_src_value
+                      WHERE EXISTS (SELECT * FROM has_src_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_dest_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
+                        EXISTS (SELECT value FROM new_src_value
+                                WHERE value >= 0 LIMIT 1) %s
+                  )
+                  ON CONFLICT (account_id, asset_id)
+                  DO UPDATE SET amount = EXCLUDED.amount
+                  RETURNING (1)
+              ),
+              insert_dest AS
+              (
+                  INSERT INTO account_has_asset(account_id, asset_id, amount)
+                  (
+                      SELECT $3, $4, value
+                      FROM new_dest_value
+                      WHERE EXISTS (SELECT * FROM insert_src) AND
+                        EXISTS (SELECT * FROM has_src_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_dest_account LIMIT 1) AND
+                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
+                        EXISTS (SELECT value FROM new_dest_value
+                                WHERE value < 2::decimal ^ (256 - $5)
+                                LIMIT 1) %s
+                  )
+                  ON CONFLICT (account_id, asset_id)
+                  DO UPDATE SET amount = EXCLUDED.amount
+                  RETURNING (1)
+               )
+          SELECT CASE
+              WHEN EXISTS (SELECT * FROM insert_dest LIMIT 1) THEN 0
+              %s
+              WHEN NOT EXISTS (SELECT * FROM has_dest_account LIMIT 1) THEN 2
+              WHEN NOT EXISTS (SELECT * FROM has_src_account LIMIT 1) THEN 3
+              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 4
+              WHEN NOT EXISTS (SELECT value FROM new_src_value
+                               WHERE value >= 0 LIMIT 1) THEN 5
+              WHEN NOT EXISTS (SELECT value FROM new_dest_value
+                               WHERE value < 2::decimal ^ (256 - $5)
+                               LIMIT 1) THEN 6
+              ELSE 7
+          END AS result)";
+
     std::string CommandError::toString() const {
       return (boost::format("%s: %s") % command_name % error_message).str();
     }
 
-    PostgresCommandExecutor::PostgresCommandExecutor(
-        soci::session &sql, std::map<std::string, soci::statement *> statements)
-        : sql_(sql), do_validation_(true), statements_(statements) {}
+    PostgresCommandExecutor::PostgresCommandExecutor(soci::session &sql)
+        : sql_(sql), do_validation_(true) {}
 
     void PostgresCommandExecutor::setCreatorAccountId(
         const shared_model::interface::types::AccountIdType
@@ -239,34 +663,17 @@ namespace iroha {
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::AddPeer &command) {
       auto &peer = command.peer();
-      boost::format cmd(R"(
-          WITH
-          %s
-          inserted AS (
-              INSERT INTO peer(public_key, address)
-              (
-                  SELECT :pk, :address
-                  %s
-              ) RETURNING (1)
-          )
-          SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-              %s
-              ELSE 2 END AS result)");
+
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
+
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(has_perm AS (%s),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::kAddPeer))
-                     .str()
-               % "WHERE (SELECT * FROM has_perm)"
-               % "WHEN NOT (SELECT * from has_perm) THEN 1");
+        cmd = (cmd % "addAddPeerWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "addAddPeerWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(peer.pubkey().hex(), "pk"));
-      st.exchange(soci::use(peer.address(), "address"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
+
+      cmd = (cmd % creator_account_id_ % peer.pubkey().hex() % peer.address());
+
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRolePerm(
@@ -280,63 +687,23 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "AddPeer", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "AddPeer", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::AddSignatory &command) {
       auto &account_id = command.accountId();
       auto pubkey = command.pubkey().hex();
-      boost::format cmd(R"(
-          WITH %s
-          insert_signatory AS
-          (
-              INSERT INTO signatory(public_key)
-              %s ON CONFLICT DO NOTHING RETURNING (1)
-          ),
-          has_signatory AS (SELECT * FROM signatory WHERE public_key = :pk),
-          insert_account_signatory AS
-          (
-              INSERT INTO account_has_signatory(account_id, public_key)
-              (
-                  SELECT :account_id, :pk WHERE (EXISTS
-                  (SELECT * FROM insert_signatory) OR
-                  EXISTS (SELECT * FROM has_signatory))
-                  %s
-              )
-              RETURNING (1)
-          )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM insert_account_signatory) THEN 0
-              %s
-              WHEN EXISTS (SELECT * FROM insert_signatory) THEN 2
-              ELSE 3
-          END AS RESULT;)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
 
       if (do_validation_) {
-        cmd =
-            (cmd
-             % (boost::format(R"(
-          has_perm AS (%s),)")
-                % checkAccountHasRoleOrGrantablePerm(
-                      shared_model::interface::permissions::Role::kAddSignatory,
-                      shared_model::interface::permissions::Grantable::
-                          kAddMySignatory))
-                   .str()
-             % "(SELECT :pk WHERE (SELECT * FROM has_perm))"
-             % " AND (SELECT * FROM has_perm)"
-             % "WHEN NOT (SELECT * from has_perm) THEN 1");
+        cmd = (cmd % "addSignatoryWithValidation");
       } else {
-        cmd = (cmd % "" % "(SELECT :pk)" % "" % "");
+        cmd = (cmd % "addSignatoryWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(pubkey, "pk"));
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(account_id, "grantable_account_id"));
-      st.exchange(
-          soci::use(creator_account_id_, "grantable_permittee_account_id"));
+
+      cmd = (cmd % creator_account_id_ % account_id % pubkey);
 
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
@@ -361,66 +728,23 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "AddSignatory", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "AddSignatory", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::AppendRole &command) {
       auto &account_id = command.accountId();
       auto &role_name = command.roleName();
-      const auto bits = shared_model::interface::RolePermissionSet::size();
-      boost::format cmd(R"(
-            WITH %s
-            inserted AS (
-                INSERT INTO account_has_roles(account_id, role_id)
-                (
-                    SELECT :account_id, :role_id %s) RETURNING (1)
-            )
-            SELECT CASE
-                WHEN EXISTS (SELECT * FROM inserted) THEN 0
-                %s
-                ELSE 4
-            END AS result)");
-      if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-            has_perm AS (%1%),
-            role_permissions AS (
-                SELECT permission FROM role_has_permissions
-                WHERE role_id = :role_id
-            ),
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
 
-            account_roles AS (
-                SELECT role_id FROM account_has_roles WHERE account_id = :creator_id
-            ),
-            account_has_role_permissions AS (
-                SELECT COALESCE(bit_or(rp.permission), '0'::bit(%2%)) &
-                    (SELECT * FROM role_permissions) =
-                    (SELECT * FROM role_permissions)
-                FROM role_has_permissions AS rp
-                JOIN account_has_roles AS ar on ar.role_id = rp.role_id
-                WHERE ar.account_id = :creator_id
-            ),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::kAppendRole)
-                  % std::to_string(bits))
-                     .str()
-               % R"( WHERE
-                    EXISTS (SELECT * FROM account_roles) AND
-                    (SELECT * FROM account_has_role_permissions)
-                    AND (SELECT * FROM has_perm))"
-               % R"(
-                WHEN NOT EXISTS (SELECT * FROM account_roles) THEN 1
-                WHEN NOT (SELECT * FROM account_has_role_permissions) THEN 2
-                WHEN NOT (SELECT * FROM has_perm) THEN 3)");
+      if (do_validation_) {
+        cmd = (cmd % "appendRoleWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "appendRoleWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(role_name, "role_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
+
+      cmd = (cmd % creator_account_id_ % account_id % role_name);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return (boost::format("is valid command validation failed: no "
@@ -448,7 +772,8 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "AppendRole", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "AppendRole", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -457,80 +782,17 @@ namespace iroha {
       auto &domain_id = command.domainId();
       auto &pubkey = command.pubkey().hex();
       std::string account_id = account_name + "@" + domain_id;
-      boost::format cmd(R"(
-          WITH get_domain_default_role AS (SELECT default_role FROM domain
-                                           WHERE domain_id = :domain_id),
-          %s
-          insert_signatory AS
-          (
-              INSERT INTO signatory(public_key)
-              (
-                  SELECT :pk WHERE EXISTS
-                  (SELECT * FROM get_domain_default_role)
-              ) ON CONFLICT DO NOTHING RETURNING (1)
-          ),
-          has_signatory AS (SELECT * FROM signatory WHERE public_key = :pk),
-          insert_account AS
-          (
-              INSERT INTO account(account_id, domain_id, quorum, data)
-              (
-                  SELECT :account_id, :domain_id, 1, '{}' WHERE (EXISTS
-                      (SELECT * FROM insert_signatory) OR EXISTS
-                      (SELECT * FROM has_signatory)
-                  ) AND EXISTS (SELECT * FROM get_domain_default_role)
-                  %s
-              ) RETURNING (1)
-          ),
-          insert_account_signatory AS
-          (
-              INSERT INTO account_has_signatory(account_id, public_key)
-              (
-                  SELECT :account_id, :pk WHERE
-                     EXISTS (SELECT * FROM insert_account)
-              )
-              RETURNING (1)
-          ),
-          insert_account_role AS
-          (
-              INSERT INTO account_has_roles(account_id, role_id)
-              (
-                  SELECT :account_id, default_role FROM get_domain_default_role
-                  WHERE EXISTS (SELECT * FROM get_domain_default_role)
-                    AND EXISTS (SELECT * FROM insert_account_signatory)
-              ) RETURNING (1)
-          )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM insert_account_role) THEN 0
-              %s
-              WHEN NOT EXISTS (SELECT * FROM account
-                               WHERE account_id = :account_id) THEN 2
-              WHEN NOT EXISTS (SELECT * FROM account_has_signatory
-                               WHERE account_id = :account_id
-                               AND public_key = :pk) THEN 3
-              WHEN NOT EXISTS (SELECT * FROM account_has_roles
-                               WHERE account_id = account_id AND role_id = (
-                               SELECT default_role FROM get_domain_default_role)
-                               ) THEN 4
-              ELSE 5
-              END AS result)");
+
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%', '%5%')");
+
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-            has_perm AS (%s),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::
-                            kCreateAccount))
-                     .str()
-               % R"(AND (SELECT * FROM has_perm))"
-               % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)");
+        cmd = (cmd % "createAccountWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "createAccountWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(domain_id, "domain_id"));
-      st.exchange(soci::use(pubkey, "pk"));
+
+      cmd = (cmd % creator_account_id_ % account_id % domain_id % pubkey);
+
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRolePerm(
@@ -562,45 +824,24 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "CreateAccount", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "CreateAccount", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::CreateAsset &command) {
       auto &domain_id = command.domainId();
       auto asset_id = command.assetName() + "#" + domain_id;
-      auto precision = command.precision();
-      boost::format cmd(R"(
-              WITH %s
-              inserted AS
-              (
-                  INSERT INTO asset(asset_id, domain_id, precision, data)
-                  (
-                      SELECT :id, :domain_id, :precision, NULL
-                      %s
-                  ) RETURNING (1)
-              )
-              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-              %s
-              ELSE 2 END AS result)");
+      int precision = command.precision();
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%', %5%)");
       if (do_validation_) {
-        cmd =
-            (cmd
-             % (boost::format(R"(
-              has_perm AS (%s),)")
-                % checkAccountRolePermission(
-                      shared_model::interface::permissions::Role::kCreateAsset))
-                   .str()
-             % R"(WHERE (SELECT * FROM has_perm))"
-             % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)");
+        cmd = (cmd % "createAssetWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "createAssetWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(asset_id, "id"));
-      st.exchange(soci::use(domain_id, "domain_id"));
-      st.exchange(soci::use(precision, "precision"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
+
+      cmd = (cmd % creator_account_id_ % asset_id % domain_id % precision);
+
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRolePerm(
@@ -613,43 +854,22 @@ namespace iroha {
                     % asset_id % domain_id % precision)
                 .str();
           }};
-      return makeCommandResultByReturnedValue(st, "CreateAsset", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "CreateAsset", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::CreateDomain &command) {
       auto &domain_id = command.domainId();
       auto &default_role = command.userDefaultRole();
-      boost::format cmd(R"(
-              WITH %s
-              inserted AS
-              (
-                  INSERT INTO domain(domain_id, default_role)
-                  (
-                      SELECT :id, :role
-                      %s
-                  ) RETURNING (1)
-              )
-              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-              %s
-              ELSE 2 END AS result)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-              has_perm AS (%s),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::
-                            kCreateDomain))
-                     .str()
-               % R"(WHERE (SELECT * FROM has_perm))"
-               % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)");
+        cmd = (cmd % "createDomainWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "createDomainWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(domain_id, "id"));
-      st.exchange(soci::use(default_role, "role"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
+
+      cmd = (cmd % creator_account_id_ % domain_id % default_role);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRolePerm(
@@ -662,7 +882,8 @@ namespace iroha {
                     % domain_id % default_role)
                 .str();
           }};
-      return makeCommandResultByReturnedValue(st, "CreateDomain", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "CreateDomain", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -670,55 +891,14 @@ namespace iroha {
       auto &role_id = command.roleName();
       auto &permissions = command.rolePermissions();
       auto perm_str = permissions.toBitstring();
-      const auto bits = shared_model::interface::RolePermissionSet::size();
-      boost::format cmd(R"(
-          WITH %s
-          insert_role AS (INSERT INTO role(role_id)
-                              (SELECT :role_id
-                              %s) RETURNING (1)),
-          insert_role_permissions AS
-          (
-              INSERT INTO role_has_permissions(role_id, permission)
-              (
-                  SELECT :role_id, :perms WHERE EXISTS
-                      (SELECT * FROM insert_role)
-              ) RETURNING (1)
-          )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM insert_role_permissions) THEN 0
-              %s
-              WHEN EXISTS (SELECT * FROM role WHERE role_id = :role_id) THEN 1
-              ELSE 4
-              END AS result)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
       if (do_validation_) {
-        cmd =
-            (cmd
-             % (boost::format(R"(
-          account_has_role_permissions AS (
-                SELECT COALESCE(bit_or(rp.permission), '0'::bit(%s)) &
-                    :perms = :perms
-                FROM role_has_permissions AS rp
-                JOIN account_has_roles AS ar on ar.role_id = rp.role_id
-                WHERE ar.account_id = :creator_id),
-          has_perm AS (%s),)")
-                % std::to_string(bits)
-                % checkAccountRolePermission(
-                      shared_model::interface::permissions::Role::kCreateRole))
-                   .str()
-             % R"(WHERE (SELECT * FROM account_has_role_permissions)
-                          AND (SELECT * FROM has_perm))"
-             % R"(WHEN NOT (SELECT * FROM
-                               account_has_role_permissions) THEN 2
-                        WHEN NOT (SELECT * FROM has_perm) THEN 3)");
+        cmd = (cmd % "createRoleWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "createRoleWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(role_id, "role_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(perm_str, "perms"));
 
+      cmd = (cmd % creator_account_id_ % role_id % perm_str);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             // TODO(@l4l) 26/06/18 need to be simplified at IR-1479
@@ -748,43 +928,22 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "CreateRole", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "CreateRole", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::DetachRole &command) {
       auto &account_id = command.accountId();
       auto &role_name = command.roleName();
-      boost::format cmd(R"(
-            WITH %s
-            deleted AS
-            (
-              DELETE FROM account_has_roles
-              WHERE account_id=:account_id
-              AND role_id=:role_id
-              %s
-              RETURNING (1)
-            )
-            SELECT CASE WHEN EXISTS (SELECT * FROM deleted) THEN 0
-            %s
-            ELSE 2 END AS result)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
       if (do_validation_) {
-        cmd =
-            (cmd
-             % (boost::format(R"(
-            has_perm AS (%s),)")
-                % checkAccountRolePermission(
-                      shared_model::interface::permissions::Role::kDetachRole))
-                   .str()
-             % R"(AND (SELECT * FROM has_perm))"
-             % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)");
+        cmd = (cmd % "detachRoleWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "detachRoleWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(role_name, "role_id"));
+
+      cmd = (cmd % creator_account_id_ % account_id % role_name);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRolePerm(
@@ -798,49 +957,30 @@ namespace iroha {
                     % account_id % role_name)
                 .str();
           }};
-      return makeCommandResultByReturnedValue(st, "DetachRole", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "DetachRole", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::GrantPermission &command) {
       auto &permittee_account_id = command.accountId();
-      auto &account_id = creator_account_id_;
       auto permission = command.permissionName();
+      auto perm = shared_model::interface::RolePermissionSet(
+                      {shared_model::interface::permissions::permissionFor(
+                          command.permissionName())})
+                      .toBitstring();
       const auto perm_str =
           shared_model::interface::GrantablePermissionSet({permission})
               .toBitstring();
-      boost::format cmd(R"(
-            WITH %s
-            inserted AS (
-              INSERT INTO account_has_grantable_permissions as
-              has_perm(permittee_account_id, account_id, permission)
-              (SELECT :permittee_account_id, :account_id, :perms %s) ON CONFLICT
-              (permittee_account_id, account_id)
-              DO UPDATE SET permission=(SELECT has_perm.permission | :perms
-              WHERE (has_perm.permission & :perms) <> :perms)
-              RETURNING (1)
-            )
-            SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-              %s
-              ELSE 2 END AS result)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%', '%5%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-            has_perm AS (%s),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::permissionFor(
-                            command.permissionName())))
-                     .str()
-               % R"( WHERE (SELECT * FROM has_perm))"
-               % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)");
+        cmd = (cmd % "grantPermissionWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "grantPermissionWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(permittee_account_id, "permittee_account_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(perm_str, "perms"));
+
+      cmd =
+          (cmd % creator_account_id_ % permittee_account_id % perm_str % perm);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missGrantablePerm(creator_account_id_,
@@ -854,94 +994,28 @@ namespace iroha {
                         "account id: '%s', "
                         "permission: '%s'")
                     % permittee_account_id
-                    % account_id
+                    % creator_account_id_
                     // TODO(@l4l) 26/06/18 need to be simplified at IR-1479
                     % shared_model::proto::permissions::toString(permission))
                 .str();
           }};
 
       return makeCommandResultByReturnedValue(
-          st, "GrantPermission", message_gen);
+          sql_, cmd.str(), "GrantPermission", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::RemoveSignatory &command) {
       auto &account_id = command.accountId();
       auto &pubkey = command.pubkey().hex();
-      boost::format cmd(R"(
-          WITH
-          %s
-          delete_account_signatory AS (DELETE FROM account_has_signatory
-              WHERE account_id = :account_id
-              AND public_key = :pk
-              %s
-              RETURNING (1)),
-          delete_signatory AS
-          (
-              DELETE FROM signatory WHERE public_key = :pk AND
-                  NOT EXISTS (SELECT 1 FROM account_has_signatory
-                              WHERE public_key = :pk)
-                  AND NOT EXISTS (SELECT 1 FROM peer WHERE public_key = :pk)
-              RETURNING (1)
-          )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM delete_account_signatory) THEN
-              CASE
-                  WHEN EXISTS (SELECT * FROM delete_signatory) THEN 0
-                  WHEN EXISTS (SELECT 1 FROM account_has_signatory
-                               WHERE public_key = :pk) THEN 0
-                  WHEN EXISTS (SELECT 1 FROM peer
-                               WHERE public_key = :pk) THEN 0
-                  ELSE 2
-              END
-              %s
-              ELSE 1
-          END AS result)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-          has_perm AS (%s),
-          get_account AS (
-              SELECT quorum FROM account WHERE account_id = :account_id LIMIT 1
-           ),
-          get_signatories AS (
-              SELECT public_key FROM account_has_signatory
-              WHERE account_id = :account_id
-          ),
-          check_account_signatories AS (
-              SELECT quorum FROM get_account
-              WHERE quorum < (SELECT COUNT(*) FROM get_signatories)
-          ),
-          )")
-                  % checkAccountHasRoleOrGrantablePerm(
-                        shared_model::interface::permissions::Role::
-                            kRemoveSignatory,
-                        shared_model::interface::permissions::Grantable::
-                            kRemoveMySignatory))
-                     .str()
-               % R"(
-              AND (SELECT * FROM has_perm)
-              AND EXISTS (SELECT * FROM get_account)
-              AND EXISTS (SELECT * FROM get_signatories)
-              AND EXISTS (SELECT * FROM check_account_signatories)
-          )" % R"(
-              WHEN NOT (SELECT * FROM has_perm) THEN 6
-              WHEN NOT EXISTS (SELECT * FROM get_account) THEN 3
-              WHEN NOT EXISTS (SELECT * FROM get_signatories) THEN 4
-              WHEN NOT EXISTS (SELECT * FROM check_account_signatories) THEN 5
-          )");
+        cmd = (cmd % "removeSignatoryWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "removeSignatoryWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(pubkey, "pk"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(account_id, "grantable_account_id"));
-      st.exchange(
-          soci::use(creator_account_id_, "grantable_permittee_account_id"));
 
+      cmd = (cmd % creator_account_id_ % account_id % pubkey);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return (boost::format(
@@ -984,7 +1058,7 @@ namespace iroha {
           },
       };
       return makeCommandResultByReturnedValue(
-          st, "RemoveSignatory", message_gen);
+          sql_, cmd.str(), "RemoveSignatory", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -1000,40 +1074,17 @@ namespace iroha {
       const auto perms = shared_model::interface::GrantablePermissionSet()
                              .set(permission)
                              .toBitstring();
-      boost::format cmd(R"(
-              WITH %s
-              inserted AS (
-                  UPDATE account_has_grantable_permissions as has_perm
-                  SET permission=(SELECT has_perm.permission & :without_perm
-                  WHERE has_perm.permission & :perm = :perm AND
-                  has_perm.permittee_account_id=:permittee_account_id AND
-                  has_perm.account_id=:account_id) WHERE
-                  permittee_account_id=:permittee_account_id AND
-                  account_id=:account_id %s
-                RETURNING (1)
-              )
-              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-                  %s
-                  ELSE 2 END AS result)");
+
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', '%4%', '%5%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-            has_perm AS (%s),)")
-                  % checkAccountGrantablePermission(permission))
-                     .str()
-               % R"( AND (SELECT * FROM has_perm))"
-               % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )");
+        cmd = (cmd % "revokePermissionWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "revokePermissionWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(
-          soci::use(permittee_account_id, "grantable_permittee_account_id"));
-      st.exchange(soci::use(account_id, "grantable_account_id"));
-      st.exchange(soci::use(permittee_account_id, "permittee_account_id"));
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(without_perm_str, "without_perm"));
-      st.exchange(soci::use(perms, "perm"));
+
+      cmd = (cmd % creator_account_id_ % permittee_account_id % perms
+             % without_perm_str);
+
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missGrantablePerm(creator_account_id_,
@@ -1053,7 +1104,7 @@ namespace iroha {
                 .str();
           }};
       return makeCommandResultByReturnedValue(
-          st, "RevokePermission", message_gen);
+          sql_, cmd.str(), "RevokePermission", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -1070,54 +1121,16 @@ namespace iroha {
       std::string filled_json = "{" + creator_account_id_ + ", " + key + "}";
       std::string val = "\"" + value + "\"";
 
-      boost::format cmd(R"(
-              WITH %s
-              inserted AS
-              (
-                  UPDATE account SET data = jsonb_set(
-                  CASE WHEN data ?:creator_account_id THEN data ELSE
-                  jsonb_set(data, :json, :empty_json) END,
-                  :filled_json, :val) WHERE account_id=:account_id %s
-                  RETURNING (1)
-              )
-              SELECT CASE WHEN EXISTS (SELECT * FROM inserted) THEN 0
-                  %s
-                  ELSE 2 END AS result)");
+      auto cmd = boost::format(
+          "EXECUTE %1% ('%2%', '%3%', '%4%', '%5%', '%6%', '%7%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-              has_role_perm AS (%s),
-              has_grantable_perm AS (%s),
-              has_perm AS (SELECT CASE
-                               WHEN (SELECT * FROM has_grantable_perm) THEN true
-                               WHEN (:creator_id = :account_id) THEN true
-                               WHEN (SELECT * FROM has_role_perm) THEN true
-                               ELSE false END
-              ),
-              )")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::kSetDetail)
-                  % checkAccountGrantablePermission(
-                        shared_model::interface::permissions::Grantable::
-                            kSetMyAccountDetail))
-                     .str()
-               % R"( AND (SELECT * FROM has_perm))"
-               % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )");
+        cmd = (cmd % "setAccountDetailWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "setAccountDetailWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(creator_account_id_, "creator_account_id"));
-      st.exchange(soci::use(json, "json"));
-      st.exchange(soci::use(empty_json, "empty_json"));
-      st.exchange(soci::use(filled_json, "filled_json"));
-      st.exchange(soci::use(val, "val"));
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(account_id, "grantable_account_id"));
-      st.exchange(
-          soci::use(creator_account_id_, "grantable_permittee_account_id"));
+
+      cmd = (cmd % creator_account_id_ % account_id % json % filled_json % val
+             % empty_json);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return missRoleOrGrantablePerm(
@@ -1135,64 +1148,21 @@ namespace iroha {
                 .str();
           }};
       return makeCommandResultByReturnedValue(
-          st, "SetAccountDetail", message_gen);
+          sql_, cmd.str(), "SetAccountDetail", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::SetQuorum &command) {
       auto &account_id = command.accountId();
-      auto quorum = command.newQuorum();
-      boost::format cmd(R"(WITH
-          %s
-          %s
-          updated AS (
-              UPDATE account SET quorum=:quorum
-              WHERE account_id=:account_id
-              %s
-              RETURNING (1)
-          )
-          SELECT CASE WHEN EXISTS (SELECT * FROM updated) THEN 0
-              %s
-              ELSE 4
-          END AS result)");
+      int quorum = command.newQuorum();
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', %4%)");
       if (do_validation_) {
-        cmd = (cmd % R"(
-          get_signatories AS (
-              SELECT public_key FROM account_has_signatory
-              WHERE account_id = :account_id
-          ),
-          check_account_signatories AS (
-              SELECT 1 FROM account
-              WHERE :quorum >= (SELECT COUNT(*) FROM get_signatories)
-              AND account_id = :account_id
-          ),)"
-               % (boost::format(R"(
-          has_perm AS (%s),)")
-                  % checkAccountHasRoleOrGrantablePerm(
-                        shared_model::interface::permissions::Role::kSetQuorum,
-                        shared_model::interface::permissions::Grantable::
-                            kSetMyQuorum))
-                     .str()
-               % R"(AND EXISTS
-              (SELECT * FROM get_signatories)
-              AND EXISTS (SELECT * FROM check_account_signatories)
-              AND (SELECT * FROM has_perm))"
-               % R"(
-              WHEN NOT (SELECT * FROM has_perm) THEN 3
-              WHEN NOT EXISTS (SELECT * FROM get_signatories) THEN 1
-              WHEN NOT EXISTS (SELECT * FROM check_account_signatories) THEN 2
-              )");
+        cmd = (cmd % "setQuorumWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "" % "");
+        cmd = (cmd % "setQuorumWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(quorum, "quorum"));
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(account_id, "grantable_account_id"));
-      st.exchange(
-          soci::use(creator_account_id_, "grantable_permittee_account_id"));
+
+      cmd = (cmd % creator_account_id_ % account_id % quorum);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return (boost::format("is valid command validation failed: no "
@@ -1224,76 +1194,23 @@ namespace iroha {
                 .str();
           },
       };
-      return makeCommandResultByReturnedValue(st, "SetQuorum", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "SetQuorum", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
         const shared_model::interface::SubtractAssetQuantity &command) {
-      auto &account_id = creator_account_id_;
       auto &asset_id = command.assetId();
       auto amount = command.amount().toStringRepr();
       uint32_t precision = command.amount().precision();
-      boost::format cmd(R"(
-          WITH %s
-               has_account AS (SELECT account_id FROM account
-                               WHERE account_id = :account_id LIMIT 1),
-               has_asset AS (SELECT asset_id FROM asset
-                             WHERE asset_id = :asset_id
-                             AND precision >= :precision LIMIT 1),
-               amount AS (SELECT amount FROM account_has_asset
-                          WHERE asset_id = :asset_id
-                          AND account_id = :account_id LIMIT 1),
-               new_value AS (SELECT
-                              (SELECT
-                                  CASE WHEN EXISTS
-                                      (SELECT amount FROM amount LIMIT 1)
-                                      THEN (SELECT amount FROM amount LIMIT 1)
-                                  ELSE 0::decimal
-                              END) - :value::decimal AS value
-                          ),
-               inserted AS
-               (
-                  INSERT INTO account_has_asset(account_id, asset_id, amount)
-                  (
-                      SELECT :account_id, :asset_id, value FROM new_value
-                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
-                        EXISTS (SELECT value FROM new_value WHERE value >= 0 LIMIT 1)
-                        %s
-                  )
-                  ON CONFLICT (account_id, asset_id)
-                  DO UPDATE SET amount = EXCLUDED.amount
-                  RETURNING (1)
-               )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
-              %s
-              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
-              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
-              WHEN NOT EXISTS
-                  (SELECT value FROM new_value WHERE value >= 0 LIMIT 1) THEN 4
-              ELSE 5
-          END AS result;)");
+      auto cmd = boost::format("EXECUTE %1% ('%2%', '%3%', %4%, '%5%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-               has_perm AS (%s),)")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::
-                            kSubtractAssetQty))
-                     .str()
-               % R"( AND (SELECT * FROM has_perm))"
-               % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )");
+        cmd = (cmd % "subtractAssetQuantityWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "");
+        cmd = (cmd % "subtractAssetQuantityWithoutValidation");
       }
 
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(account_id, "account_id"));
-      st.exchange(soci::use(asset_id, "asset_id"));
-      st.exchange(soci::use(amount, "value"));
-      st.exchange(soci::use(precision, "precision"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
+      cmd = (cmd % creator_account_id_ % asset_id % precision % amount);
 
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
@@ -1306,7 +1223,7 @@ namespace iroha {
           [&] { return "Subtracts overdrafts account asset"; },
       };
       return makeCommandResultByReturnedValue(
-          st, "SubtractAssetQuantity", message_gen);
+          sql_, cmd.str(), "SubtractAssetQuantity", message_gen);
     }
 
     CommandResult PostgresCommandExecutor::operator()(
@@ -1316,134 +1233,16 @@ namespace iroha {
       auto &asset_id = command.assetId();
       auto amount = command.amount().toStringRepr();
       uint32_t precision = command.amount().precision();
-      boost::format cmd(R"(
-          WITH
-              %s
-              has_src_account AS (SELECT account_id FROM account
-                                   WHERE account_id = :src_account_id LIMIT 1),
-              has_dest_account AS (SELECT account_id FROM account
-                                    WHERE account_id = :dest_account_id
-                                    LIMIT 1),
-              has_asset AS (SELECT asset_id FROM asset
-                             WHERE asset_id = :asset_id AND
-                             precision >= :precision LIMIT 1),
-              src_amount AS (SELECT amount FROM account_has_asset
-                              WHERE asset_id = :asset_id AND
-                              account_id = :src_account_id LIMIT 1),
-              dest_amount AS (SELECT amount FROM account_has_asset
-                               WHERE asset_id = :asset_id AND
-                               account_id = :dest_account_id LIMIT 1),
-              new_src_value AS (SELECT
-                              (SELECT
-                                  CASE WHEN EXISTS
-                                      (SELECT amount FROM src_amount LIMIT 1)
-                                      THEN
-                                      (SELECT amount FROM src_amount LIMIT 1)
-                                  ELSE 0::decimal
-                              END) - :value::decimal AS value
-                          ),
-              new_dest_value AS (SELECT
-                              (SELECT :value::decimal +
-                                  CASE WHEN EXISTS
-                                      (SELECT amount FROM dest_amount LIMIT 1)
-                                          THEN
-                                      (SELECT amount FROM dest_amount LIMIT 1)
-                                  ELSE 0::decimal
-                              END) AS value
-                          ),
-              insert_src AS
-              (
-                  INSERT INTO account_has_asset(account_id, asset_id, amount)
-                  (
-                      SELECT :src_account_id, :asset_id, value
-                      FROM new_src_value
-                      WHERE EXISTS (SELECT * FROM has_src_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_dest_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
-                        EXISTS (SELECT value FROM new_src_value
-                                WHERE value >= 0 LIMIT 1) %s
-                  )
-                  ON CONFLICT (account_id, asset_id)
-                  DO UPDATE SET amount = EXCLUDED.amount
-                  RETURNING (1)
-              ),
-              insert_dest AS
-              (
-                  INSERT INTO account_has_asset(account_id, asset_id, amount)
-                  (
-                      SELECT :dest_account_id, :asset_id, value
-                      FROM new_dest_value
-                      WHERE EXISTS (SELECT * FROM insert_src) AND
-                        EXISTS (SELECT * FROM has_src_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_dest_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
-                        EXISTS (SELECT value FROM new_dest_value
-                                WHERE value < 2::decimal ^ (256 - :precision)
-                                LIMIT 1) %s
-                  )
-                  ON CONFLICT (account_id, asset_id)
-                  DO UPDATE SET amount = EXCLUDED.amount
-                  RETURNING (1)
-               )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM insert_dest LIMIT 1) THEN 0
-              %s
-              WHEN NOT EXISTS (SELECT * FROM has_dest_account LIMIT 1) THEN 2
-              WHEN NOT EXISTS (SELECT * FROM has_src_account LIMIT 1) THEN 3
-              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 4
-              WHEN NOT EXISTS (SELECT value FROM new_src_value
-                               WHERE value >= 0 LIMIT 1) THEN 5
-              WHEN NOT EXISTS (SELECT value FROM new_dest_value
-                               WHERE value < 2::decimal ^ (256 - :precision)
-                               LIMIT 1) THEN 6
-              ELSE 7
-          END AS result;)");
+      auto cmd =
+          boost::format("EXECUTE %1% ('%2%', '%3%', '%4%', '%5%', %6%, '%7%')");
       if (do_validation_) {
-        cmd = (cmd
-               % (boost::format(R"(
-              has_role_perm AS (%s),
-              has_grantable_perm AS (%s),
-              dest_can_receive AS (%s),
-              has_perm AS (SELECT
-                               CASE WHEN (SELECT * FROM dest_can_receive) THEN
-                                   CASE WHEN NOT (:creator_id = :src_account_id) THEN
-                                       CASE WHEN (SELECT * FROM has_grantable_perm)
-                                           THEN true
-                                       ELSE false END
-                                   ELSE
-                                        CASE WHEN (SELECT * FROM has_role_perm)
-                                            THEN true
-                                        ELSE false END
-                                   END
-                               ELSE false END
-              ),
-              )")
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::kTransfer)
-                  % checkAccountGrantablePermission(
-                        shared_model::interface::permissions::Grantable::
-                            kTransferMyAssets)
-                  % checkAccountRolePermission(
-                        shared_model::interface::permissions::Role::kReceive,
-                        ":dest_account_id"))
-                     .str()
-               % R"( AND (SELECT * FROM has_perm))"
-               % R"( AND (SELECT * FROM has_perm))"
-               % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )");
+        cmd = (cmd % "transferAssetWithValidation");
       } else {
-        cmd = (cmd % "" % "" % "" % "");
+        cmd = (cmd % "transferAssetWithoutValidation");
       }
-      soci::statement st = sql_.prepare << cmd.str();
-      st.exchange(soci::use(src_account_id, "src_account_id"));
-      st.exchange(soci::use(dest_account_id, "dest_account_id"));
-      st.exchange(soci::use(asset_id, "asset_id"));
-      st.exchange(soci::use(amount, "value"));
-      st.exchange(soci::use(precision, "precision"));
-      st.exchange(soci::use(creator_account_id_, "role_account_id"));
-      st.exchange(soci::use(creator_account_id_, "creator_id"));
-      st.exchange(soci::use(src_account_id, "grantable_account_id"));
-      st.exchange(
-          soci::use(creator_account_id_, "grantable_permittee_account_id"));
+
+      cmd = (cmd % creator_account_id_ % src_account_id % dest_account_id
+             % asset_id % precision % amount);
       std::vector<std::function<std::string()>> message_gen = {
           [&] {
             return (boost::format(
@@ -1469,58 +1268,11 @@ namespace iroha {
           [&] { return "Transfer overdrafts source account asset"; },
           [&] { return "Transfer overflows destanation account asset"; },
       };
-      return makeCommandResultByReturnedValue(st, "TransferAsset", message_gen);
+      return makeCommandResultByReturnedValue(
+          sql_, cmd.str(), "TransferAsset", message_gen);
     }
 
-    std::map<std::string, soci::statement *>
-    PostgresCommandExecutor::prepareStatements(soci::session &sql) {
-      std::map<std::string, soci::statement *> result;
-
-      std::string addAssetQuantityBase = R"(
-          PREPARE %s (text, text, int, text) AS
-          WITH has_account AS (SELECT account_id FROM account
-                               WHERE account_id = $1 LIMIT 1),
-               has_asset AS (SELECT asset_id FROM asset
-                             WHERE asset_id = $2 AND
-                             precision >= $3 LIMIT 1),
-               %s
-               amount AS (SELECT amount FROM account_has_asset
-                          WHERE asset_id = $2 AND
-                          account_id = $1 LIMIT 1),
-               new_value AS (SELECT $4::decimal +
-                              (SELECT
-                                  CASE WHEN EXISTS
-                                      (SELECT amount FROM amount LIMIT 1) THEN
-                                      (SELECT amount FROM amount LIMIT 1)
-                                  ELSE 0::decimal
-                              END) AS value
-                          ),
-               inserted AS
-               (
-                  INSERT INTO account_has_asset(account_id, asset_id, amount)
-                  (
-                      SELECT $1, $2, value FROM new_value
-                      WHERE EXISTS (SELECT * FROM has_account LIMIT 1) AND
-                        EXISTS (SELECT * FROM has_asset LIMIT 1) AND
-                        EXISTS (SELECT value FROM new_value
-                                WHERE value < 2::decimal ^ (256 - $3)
-                                LIMIT 1)
-                        %s
-                  )
-                  ON CONFLICT (account_id, asset_id) DO UPDATE
-                  SET amount = EXCLUDED.amount
-                  RETURNING (1)
-               )
-          SELECT CASE
-              WHEN EXISTS (SELECT * FROM inserted LIMIT 1) THEN 0
-              %s
-              WHEN NOT EXISTS (SELECT * FROM has_account LIMIT 1) THEN 2
-              WHEN NOT EXISTS (SELECT * FROM has_asset LIMIT 1) THEN 3
-              WHEN NOT EXISTS (SELECT value FROM new_value
-                               WHERE value < 2::decimal ^ (256 - $3)
-                               LIMIT 1) THEN 4
-              ELSE 5
-          END AS result;)";
+    void PostgresCommandExecutor::prepareStatements(soci::session &sql) {
       std::string addAssetQuantityWithValidation =
           (boost::format(addAssetQuantityBase)
            % "addAssetQuantityWithValidation"
@@ -1540,7 +1292,414 @@ namespace iroha {
       sql << addAssetQuantityWithValidation;
       sql << addAssetQuantityWithoutValidation;
 
-      return result;
+      std::string addPeerWithValidation =
+          (boost::format(addPeerBase) % "addAddPeerWithValidation"
+           % (boost::format(R"(has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kAddPeer, "$1"))
+                 .str()
+           % "WHERE (SELECT * FROM has_perm)"
+           % "WHEN NOT (SELECT * from has_perm) THEN 1")
+              .str();
+      std::string addPeerWithoutValidation =
+          (boost::format(addPeerBase) % "addAddPeerWithoutValidation" % "" % ""
+           % "")
+              .str();
+
+      sql << addPeerWithValidation;
+      sql << addPeerWithoutValidation;
+
+      std::string addSignatoryWithValidation =
+          (boost::format(addSignatoryBase) % "addSignatoryWithValidation"
+           % (boost::format(R"(
+          has_perm AS (%s),)")
+              % checkAccountHasRoleOrGrantablePerm(
+                    shared_model::interface::permissions::Role::kAddSignatory,
+                    shared_model::interface::permissions::Grantable::
+                        kAddMySignatory,
+                    "$1",
+                    "$2"))
+                 .str()
+           % "(SELECT $3 WHERE (SELECT * FROM has_perm))"
+           % " AND (SELECT * FROM has_perm)"
+           % "WHEN NOT (SELECT * from has_perm) THEN 1")
+              .str();
+      std::string addSignatoryWithoutValidation =
+          (boost::format(addSignatoryBase) % "addSignatoryWithoutValidation"
+           % "" % "(SELECT $3)" % "" % "")
+              .str();
+
+      sql << addSignatoryWithValidation;
+      sql << addSignatoryWithoutValidation;
+
+      const auto bits = shared_model::interface::RolePermissionSet::size();
+      const auto grantable_bits =
+          shared_model::interface::GrantablePermissionSet::size();
+      std::string appendRoleWithValidation =
+          (boost::format(appendRoleBase) % "appendRoleWithValidation"
+           % (boost::format(R"(
+            has_perm AS (%1%),
+            role_permissions AS (
+                SELECT permission FROM role_has_permissions
+                WHERE role_id = $3
+            ),
+            account_roles AS (
+                SELECT role_id FROM account_has_roles WHERE account_id = $1
+            ),
+            account_has_role_permissions AS (
+                SELECT COALESCE(bit_or(rp.permission), '0'::bit(%2%)) &
+                    (SELECT * FROM role_permissions) =
+                    (SELECT * FROM role_permissions)
+                FROM role_has_permissions AS rp
+                JOIN account_has_roles AS ar on ar.role_id = rp.role_id
+                WHERE ar.account_id = $1
+            ),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kAppendRole,
+                    "$1")
+              % std::to_string(bits))
+                 .str()
+           % R"( WHERE
+                    EXISTS (SELECT * FROM account_roles) AND
+                    (SELECT * FROM account_has_role_permissions)
+                    AND (SELECT * FROM has_perm))"
+           % R"(
+                WHEN NOT EXISTS (SELECT * FROM account_roles) THEN 1
+                WHEN NOT (SELECT * FROM account_has_role_permissions) THEN 2
+                WHEN NOT (SELECT * FROM has_perm) THEN 3)")
+              .str();
+      std::string appendRoleWithoutValidation =
+          (boost::format(appendRoleBase) % "appendRoleWithoutValidation" % ""
+           % "" % "")
+              .str();
+
+      sql << appendRoleWithValidation;
+      sql << appendRoleWithoutValidation;
+
+      std::string createAccountWithValidation =
+          (boost::format(createAccountBase) % "createAccountWithValidation"
+           % (boost::format(R"(
+            has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kCreateAccount,
+                    "$1"))
+                 .str()
+           % R"(AND (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)")
+              .str();
+      std::string createAccountWithoutValidation =
+          (boost::format(createAccountBase) % "createAccountWithoutValidation"
+           % "" % "" % "")
+              .str();
+
+      sql << createAccountWithValidation;
+      sql << createAccountWithoutValidation;
+
+      std::string createAssetWithValidation =
+          (boost::format(createAssetBase) % "createAssetWithValidation"
+           % (boost::format(R"(
+              has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kCreateAsset,
+                    "$1"))
+                 .str()
+           % R"(WHERE (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)")
+              .str();
+      std::string createAssetWithoutValidation =
+          (boost::format(createAssetBase) % "createAssetWithoutValidation" % ""
+           % "" % "")
+              .str();
+
+      sql << createAssetWithValidation;
+      sql << createAssetWithoutValidation;
+
+      std::string createDomainWithValidation =
+          (boost::format(createDomainBase) % "createDomainWithValidation"
+           % (boost::format(R"(
+              has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kCreateDomain,
+                    "$1"))
+                 .str()
+           % R"(WHERE (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)")
+              .str();
+      std::string createDomainWithoutValidation =
+          (boost::format(createDomainBase) % "createDomainWithoutValidation"
+           % "" % "" % "")
+              .str();
+
+      sql << createDomainWithValidation;
+      sql << createDomainWithoutValidation;
+
+      std::string createRoleWithValidation =
+          (boost::format(createRoleBase) % "createRoleWithValidation"
+           % (boost::format(R"(
+          account_has_role_permissions AS (
+                SELECT COALESCE(bit_or(rp.permission), '0'::bit(%s)) &
+                    $3 = $3
+                FROM role_has_permissions AS rp
+                JOIN account_has_roles AS ar on ar.role_id = rp.role_id
+                WHERE ar.account_id = $1),
+          has_perm AS (%s),)")
+              % std::to_string(bits)
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kCreateRole,
+                    "$1"))
+                 .str()
+           % R"(WHERE (SELECT * FROM account_has_role_permissions)
+                          AND (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM
+                               account_has_role_permissions) THEN 2
+                        WHEN NOT (SELECT * FROM has_perm) THEN 3)")
+              .str();
+      std::string createRoleWithoutValidation =
+          (boost::format(createRoleBase) % "createRoleWithoutValidation" % ""
+           % "" % "")
+              .str();
+
+      sql << createRoleWithValidation;
+      sql << createRoleWithoutValidation;
+
+      std::string detachRoleWithValidation =
+          (boost::format(detachRoleBase) % "detachRoleWithValidation"
+           % (boost::format(R"(
+            has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kDetachRole,
+                    "$1"))
+                 .str()
+           % R"(AND (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)")
+              .str();
+      std::string detachRoleWithoutValidation =
+          (boost::format(detachRoleBase) % "detachRoleWithoutValidation" % ""
+           % "" % "")
+              .str();
+
+      sql << detachRoleWithValidation;
+      sql << detachRoleWithoutValidation;
+
+      std::string grantPermissionWithValidation =
+          (boost::format(grantPermissionBase) % "grantPermissionWithValidation"
+           % (boost::format(R"(
+            has_perm AS (SELECT COALESCE(bit_or(rp.permission), '0'::bit(%1%))
+          & $4 = $4 FROM role_has_permissions AS rp
+              JOIN account_has_roles AS ar on ar.role_id = rp.role_id
+              WHERE ar.account_id = $1),)")
+              % bits)
+                 .str()
+           % R"( WHERE (SELECT * FROM has_perm))"
+           % R"(WHEN NOT (SELECT * FROM has_perm) THEN 1)")
+              .str();
+      std::string grantPermissionWithoutValidation =
+          (boost::format(grantPermissionBase)
+           % "grantPermissionWithoutValidation" % "" % "" % "")
+              .str();
+
+      sql << grantPermissionWithValidation;
+      sql << grantPermissionWithoutValidation;
+
+      std::string removeSignatoryWithValidation =
+          (boost::format(removeSignatoryBase) % "removeSignatoryWithValidation"
+           % (boost::format(R"(
+          has_perm AS (%s),
+          get_account AS (
+              SELECT quorum FROM account WHERE account_id = :account_id LIMIT 1
+           ),
+          get_signatories AS (
+              SELECT public_key FROM account_has_signatory
+              WHERE account_id = :account_id
+          ),
+          check_account_signatories AS (
+              SELECT quorum FROM get_account
+              WHERE quorum < (SELECT COUNT(*) FROM get_signatories)
+          ),
+          )")
+              % checkAccountHasRoleOrGrantablePerm(
+                    shared_model::interface::permissions::Role::
+                        kRemoveSignatory,
+                    shared_model::interface::permissions::Grantable::
+                        kRemoveMySignatory,
+                    "$1",
+                    "$2"))
+                 .str()
+           % R"(
+              AND (SELECT * FROM has_perm)
+              AND EXISTS (SELECT * FROM get_account)
+              AND EXISTS (SELECT * FROM get_signatories)
+              AND EXISTS (SELECT * FROM check_account_signatories)
+          )"
+           % R"(
+              WHEN NOT (SELECT * FROM has_perm) THEN 6
+              WHEN NOT EXISTS (SELECT * FROM get_account) THEN 3
+              WHEN NOT EXISTS (SELECT * FROM get_signatories) THEN 4
+              WHEN NOT EXISTS (SELECT * FROM check_account_signatories) THEN 5
+          )")
+              .str();
+      std::string removeSignatoryWithoutValidation =
+          (boost::format(removeSignatoryBase)
+           % "removeSignatoryWithoutValidation" % "" % "" % "")
+              .str();
+
+      sql << removeSignatoryWithValidation;
+      sql << removeSignatoryWithoutValidation;
+
+      std::string revokePermissionWithValidation =
+          (boost::format(revokePermissionBase)
+           % "revokePermissionWithValidation"
+           % (boost::format(R"(
+            has_perm AS (SELECT COALESCE(bit_or(permission), '0'::bit(%1%))
+          & $3 = $3 FROM account_has_grantable_permissions
+              WHERE account_id = $1 AND
+              permittee_account_id = $2),)")
+              % grantable_bits)
+                 .str()
+           % R"( AND (SELECT * FROM has_perm))"
+           % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )")
+              .str();
+      std::string revokePermissionWithoutValidation =
+          (boost::format(revokePermissionBase)
+           % "revokePermissionWithoutValidation" % "" % "" % "")
+              .str();
+
+      sql << revokePermissionWithValidation;
+      sql << revokePermissionWithoutValidation;
+
+      std::string setAccountDetailWithValidation =
+          (boost::format(setAccountDetailBase)
+           % "setAccountDetailWithValidation"
+           % (boost::format(R"(
+              has_role_perm AS (%s),
+              has_grantable_perm AS (%s),
+              has_perm AS (SELECT CASE
+                               WHEN (SELECT * FROM has_grantable_perm) THEN true
+                               WHEN ($1 = $2) THEN true
+                               WHEN (SELECT * FROM has_role_perm) THEN true
+                               ELSE false END
+              ),
+              )")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kSetDetail,
+                    "$1")
+              % checkAccountGrantablePermission(
+                    shared_model::interface::permissions::Grantable::
+                        kSetMyAccountDetail,
+                    "$1",
+                    "$2"))
+                 .str()
+           % R"( AND (SELECT * FROM has_perm))"
+           % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )")
+              .str();
+      std::string setAccountDetailWithoutValidation =
+          (boost::format(setAccountDetailBase)
+           % "setAccountDetailWithoutValidation" % "" % "" % "")
+              .str();
+
+      sql << setAccountDetailWithValidation;
+      sql << setAccountDetailWithoutValidation;
+
+      std::string setQuorumWithValidation =
+          (boost::format(setQuorumBase) % "setQuorumWithValidation" % R"(
+          get_signatories AS (
+              SELECT public_key FROM account_has_signatory
+              WHERE account_id = $2
+          ),
+          check_account_signatories AS (
+              SELECT 1 FROM account
+              WHERE $3 >= (SELECT COUNT(*) FROM get_signatories)
+              AND account_id = $2
+          ),)"
+           % (boost::format(R"(
+          has_perm AS (%s),)")
+              % checkAccountHasRoleOrGrantablePerm(
+                    shared_model::interface::permissions::Role::kSetQuorum,
+                    shared_model::interface::permissions::Grantable::
+                        kSetMyQuorum,
+                    "$1",
+                    "$2"))
+                 .str()
+           % R"(AND EXISTS
+              (SELECT * FROM get_signatories)
+              AND EXISTS (SELECT * FROM check_account_signatories)
+              AND (SELECT * FROM has_perm))"
+           % R"(
+              WHEN NOT (SELECT * FROM has_perm) THEN 3
+              WHEN NOT EXISTS (SELECT * FROM get_signatories) THEN 1
+              WHEN NOT EXISTS (SELECT * FROM check_account_signatories) THEN 2
+              )")
+              .str();
+      std::string setQuorumWithoutValidation =
+          (boost::format(setQuorumBase) % "setQuorumWithoutValidation" % "" % ""
+           % "" % "")
+              .str();
+
+      sql << setQuorumWithValidation;
+      sql << setQuorumWithoutValidation;
+
+      std::string subtractAssetQuantityWithValidation =
+          (boost::format(subtractAssetQuantityBase)
+           % "subtractAssetQuantityWithValidation"
+           % (boost::format(R"(
+               has_perm AS (%s),)")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::
+                        kSubtractAssetQty,
+                    "$1"))
+                 .str()
+           % R"( AND (SELECT * FROM has_perm))"
+           % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )")
+              .str();
+      std::string subtractAssetQuantityWithoutValidation =
+          (boost::format(subtractAssetQuantityBase)
+           % "subtractAssetQuantityWithoutValidation" % "" % "" % "")
+              .str();
+
+      sql << subtractAssetQuantityWithValidation;
+      sql << subtractAssetQuantityWithoutValidation;
+
+      std::string transferAssetWithValidation =
+          (boost::format(transferAssetBase) % "transferAssetWithValidation"
+           % (boost::format(R"(
+              has_role_perm AS (%s),
+              has_grantable_perm AS (%s),
+              dest_can_receive AS (%s),
+              has_perm AS (SELECT
+                               CASE WHEN (SELECT * FROM dest_can_receive) THEN
+                                   CASE WHEN NOT ($1 = $2) THEN
+                                       CASE WHEN (SELECT * FROM has_grantable_perm)
+                                           THEN true
+                                       ELSE false END
+                                   ELSE
+                                        CASE WHEN (SELECT * FROM has_role_perm)
+                                            THEN true
+                                        ELSE false END
+                                   END
+                               ELSE false END
+              ),
+              )")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kTransfer, "$1")
+              % checkAccountGrantablePermission(
+                    shared_model::interface::permissions::Grantable::
+                        kTransferMyAssets,
+                    "$1",
+                    "$2")
+              % checkAccountRolePermission(
+                    shared_model::interface::permissions::Role::kReceive, "$3"))
+                 .str()
+           % R"( AND (SELECT * FROM has_perm))"
+           % R"( AND (SELECT * FROM has_perm))"
+           % R"( WHEN NOT (SELECT * FROM has_perm) THEN 1 )")
+              .str();
+      std::string transferAssetWithoutValidation =
+          (boost::format(transferAssetBase) % "transferAssetWithoutValidation"
+           % "" % "" % "" % "")
+              .str();
+
+      sql << transferAssetWithValidation;
+      sql << transferAssetWithoutValidation;
     };
   }  // namespace ametsuchi
 }  // namespace iroha

@@ -13,11 +13,10 @@ namespace iroha {
   namespace ametsuchi {
     TemporaryWsvImpl::TemporaryWsvImpl(
         std::unique_ptr<soci::session> sql,
-        std::shared_ptr<shared_model::interface::CommonObjectsFactory> factory,
-        std::map<std::string, soci::statement *> statements)
+        std::shared_ptr<shared_model::interface::CommonObjectsFactory> factory)
         : sql_(std::move(sql)),
           wsv_(std::make_shared<PostgresWsvQuery>(*sql_, factory)),
-          command_executor_(std::make_unique<PostgresCommandExecutor>(*sql_, statements)),
+          command_executor_(std::make_unique<PostgresCommandExecutor>(*sql_)),
           log_(logger::log("TemporaryWSV")) {
       *sql_ << "BEGIN";
     }

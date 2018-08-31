@@ -46,8 +46,8 @@ namespace iroha {
             std::make_shared<shared_model::proto::ProtoCommonObjectsFactory<
                 shared_model::validation::FieldValidator>>();
         query = std::make_unique<PostgresWsvQuery>(*sql, factory);
-        statements = PostgresCommandExecutor::prepareStatements(*sql);
-        executor = std::make_unique<PostgresCommandExecutor>(*sql, statements);
+        PostgresCommandExecutor::prepareStatements(*sql);
+        executor = std::make_unique<PostgresCommandExecutor>(*sql);
 
         *sql << init_;
       }
@@ -1009,6 +1009,10 @@ namespace iroha {
           account->accountId(), account->accountId(), perm));
 
       ASSERT_TRUE(val(execute(buildCommand(
+          TestTransactionBuilder()
+              .revokePermission(account->accountId(), grantable_permission)
+              .creatorAccountId(account->accountId())))));
+      ASSERT_TRUE(err(execute(buildCommand(
           TestTransactionBuilder()
               .revokePermission(account->accountId(), grantable_permission)
               .creatorAccountId(account->accountId())))));

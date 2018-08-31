@@ -40,8 +40,7 @@ namespace iroha {
       MutableStorageImpl(shared_model::interface::types::HashType top_hash,
                          std::unique_ptr<soci::session> sql,
                          std::shared_ptr<shared_model::interface::CommonObjectsFactory>
-                         factory,
-                         std::map<std::string, soci::statement *> statements);
+                         factory);
       bool check(const shared_model::interface::BlockVariant &block,
                  MutableStoragePredicateType<decltype(block)> function) override;
 
