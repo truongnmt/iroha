@@ -142,11 +142,12 @@ namespace iroha {
     void TransactionProcessorImpl::batchHandle(
         std::shared_ptr<shared_model::interface::TransactionBatch>
             transaction_batch) const {
+      log_->info("handle batch");
       if (transaction_batch->hasAllSignatures()) {
+        log_->info("propagating batch to PCS");
         pcs_->propagate_batch(transaction_batch);
       } else {
-        // TODO: 07/08/2018 @muratovv rework interface of pcs::propagate batch
-        // and mst::propagate batch IR-1584
+        log_->info("propagating batch to MST");
         mst_processor_->propagateBatch(transaction_batch);
       }
     }
