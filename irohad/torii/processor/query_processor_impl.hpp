@@ -19,7 +19,8 @@ namespace iroha {
      public:
       QueryProcessorImpl(
           std::shared_ptr<ametsuchi::Storage> storage,
-          std::shared_ptr<ametsuchi::QueryExecutorFactory> qry_exec);
+          std::shared_ptr<ametsuchi::QueryExecutorFactory> qry_exec,
+          std::shared_ptr<iroha::PendingTransactionStorage> pending_transactions);
 
       /**
        * Checks if query has needed signatures
@@ -43,6 +44,7 @@ namespace iroha {
           blocks_query_subject_;
       std::shared_ptr<ametsuchi::Storage> storage_;
       std::shared_ptr<ametsuchi::QueryExecutorFactory> qry_exec_;
+      std::shared_ptr<iroha::PendingTransactionStorage> pending_transactions_;
     };
   }  // namespace torii
 }  // namespace iroha

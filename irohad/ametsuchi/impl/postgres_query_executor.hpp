@@ -48,7 +48,8 @@ namespace iroha {
           soci::session &sql,
           std::shared_ptr<shared_model::interface::CommonObjectsFactory>
               factory,
-          KeyValueStorage &block_store);
+          KeyValueStorage &block_store,
+          std::shared_ptr<PendingTransactionStorage> pending_txs_storage);
 
       void setCreatorId(
           const shared_model::interface::types::AccountIdType &creator_id);
@@ -91,6 +92,7 @@ namespace iroha {
       KeyValueStorage &block_store_;
       shared_model::interface::types::AccountIdType creator_id_;
       std::shared_ptr<shared_model::interface::CommonObjectsFactory> factory_;
+      std::shared_ptr<PendingTransactionStorage> pending_txs_storage_;
     };
 
     class PostgresQueryExecutor : public QueryExecutor {
@@ -99,7 +101,8 @@ namespace iroha {
           std::unique_ptr<soci::session> sql,
           std::shared_ptr<shared_model::interface::CommonObjectsFactory>
               factory,
-          KeyValueStorage &block_store);
+          KeyValueStorage &block_store,
+          std::shared_ptr<PendingTransactionStorage> pending_txs_storage);
 
       QueryExecutorResult validateAndExecute(
           const shared_model::interface::Query &query) override;
@@ -110,6 +113,7 @@ namespace iroha {
       std::unique_ptr<soci::session> sql_;
       KeyValueStorage &block_store_;
       std::shared_ptr<shared_model::interface::CommonObjectsFactory> factory_;
+      std::shared_ptr<PendingTransactionStorage> pending_txs_storage_;
       PostgresQueryExecutorVisitor visitor_;
     };
 

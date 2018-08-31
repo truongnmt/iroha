@@ -121,7 +121,8 @@ namespace iroha {
     }
 
     boost::optional<std::shared_ptr<QueryExecutor>>
-    StorageImpl::createQueryExecutor() const {
+    StorageImpl::createQueryExecutor(
+        std::shared_ptr<PendingTransactionStorage> pending_txs_storage) const {
       std::shared_lock<std::shared_timed_mutex> lock(drop_mutex);
       if (not connection_) {
         log_->info("connection to database is not initialised");
@@ -131,7 +132,8 @@ namespace iroha {
           std::make_shared<PostgresQueryExecutor>(
               std::make_unique<soci::session>(*connection_),
               factory_,
-              *block_store_));
+              *block_store_,
+              pending_txs_storage));
     }
 
     bool StorageImpl::insertBlock(const shared_model::interface::Block &block) {
