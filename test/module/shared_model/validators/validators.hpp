@@ -40,7 +40,7 @@ namespace shared_model {
     class MockBlockValidator
         : public AbstractValidator<interface::BlockVariant> {
      public:
-      MOCK_METHOD1(validate, Answer(const interface::BlockVariant &));
+      MOCK_CONST_METHOD1(validate, Answer(const interface::BlockVariant &));
     };
 
   }  // namespace validation
