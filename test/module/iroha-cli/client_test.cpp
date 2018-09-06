@@ -91,8 +91,9 @@ class ClientServerTest : public testing::Test {
     EXPECT_CALL(*mst, onExpiredBatchesImpl())
         .WillRepeatedly(Return(mst_expired_notifier.get_observable()));
 
-    EXPECT_CALL(*storage, getQueryExecutor())
-        .WillRepeatedly(Return(query_executor));
+    EXPECT_CALL(*storage, createQueryExecutor(_))
+        .WillRepeatedly(Return(boost::make_optional(
+            std::shared_ptr<QueryExecutor>(query_executor))));
 
     auto status_bus = std::make_shared<iroha::torii::StatusBusImpl>();
     auto tx_processor =

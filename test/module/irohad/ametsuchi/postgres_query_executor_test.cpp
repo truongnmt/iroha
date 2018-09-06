@@ -75,7 +75,7 @@ namespace iroha {
       }
 
       auto executeQuery(shared_model::interface::Query &query) {
-        return query_executor-> (nullptr) |
+        return query_executor->createQueryExecutor(nullptr) |
             [&query](const auto &executor) {
               return executor->validateAndExecute(query);
             };
@@ -159,9 +159,9 @@ namespace iroha {
                               .creatorAccountId(account->accountId())
                               .build();
       ASSERT_TRUE(query_executor->createQueryExecutor(nullptr) |
-          [&blocks_query](const auto &executor) {
-            return executor->validate(blocks_query);
-          });
+                  [&blocks_query](const auto &executor) {
+                    return executor->validate(blocks_query);
+                  });
     }
 
     TEST_F(BlocksQueryExecutorTest, BlocksQueryExecutorTestInvalid) {
@@ -169,9 +169,9 @@ namespace iroha {
                               .creatorAccountId(account->accountId())
                               .build();
       ASSERT_FALSE(query_executor->createQueryExecutor(nullptr) |
-          [&blocks_query](const auto &executor) {
-            return executor->validate(blocks_query);
-          });
+                   [&blocks_query](const auto &executor) {
+                     return executor->validate(blocks_query);
+                   });
     }
 
     class GetAccountExecutorTest : public QueryExecutorTest {
