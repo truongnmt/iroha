@@ -102,6 +102,7 @@ TEST_F(TransferAsset, WithoutCanTransfer) {
       .sendTx(makeTransfer())
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
@@ -251,6 +252,7 @@ TEST_F(TransferAsset, MoreThanHas) {
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
