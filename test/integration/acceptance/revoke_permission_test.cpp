@@ -38,6 +38,8 @@ TEST_F(GrantablePermissionsFixture, RevokeFromNonExistingAccount) {
       .checkVerifiedProposal(
           // transaction is not stateful valid (kAccount2 does not exist)
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(
+          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
       .done();
 }
 
@@ -75,6 +77,8 @@ TEST_F(GrantablePermissionsFixture, RevokeTwice) {
       .checkVerifiedProposal(
           // permission cannot be revoked twice
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(
+          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
       .done();
 }
 
@@ -125,6 +129,8 @@ TEST_F(GrantablePermissionsFixture, DISABLED_RevokeWithoutPermission) {
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 1); })
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(
+          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
       .done();
 }
 

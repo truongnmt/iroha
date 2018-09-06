@@ -273,6 +273,8 @@ TEST_F(GrantablePermissionsFixture, GrantWithoutGrantPermissions) {
         .checkVerifiedProposal([](auto &proposal) {
           ASSERT_EQ(proposal->transactions().size(), 0);
         })
+        .checkBlock(
+            [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
         .done();
   }
 }
@@ -303,5 +305,7 @@ TEST_F(GrantablePermissionsFixture, GrantMoreThanOnce) {
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(
+          [](auto &block) { ASSERT_EQ(block->transactions().size(), 0); })
       .done();
 }

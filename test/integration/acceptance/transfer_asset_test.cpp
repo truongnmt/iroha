@@ -123,6 +123,7 @@ TEST_F(TransferAsset, WithoutCanReceive) {
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
@@ -137,11 +138,12 @@ TEST_F(TransferAsset, NonexistentDest) {
       .setInitialState(kAdminKeypair)
       .sendTxAwait(makeFirstUser(), check(1))
       .sendTxAwait(addAssets(), check(1))
-      .sendTx(complete(
-          baseTx().transferAsset(kUserId, nonexistent, kAssetId, kDesc, kAmount)))
+      .sendTx(complete(baseTx().transferAsset(
+          kUserId, nonexistent, kAssetId, kDesc, kAmount)))
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
@@ -162,6 +164,7 @@ TEST_F(TransferAsset, NonexistentAsset) {
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
@@ -277,6 +280,7 @@ TEST_F(TransferAsset, Uint256DestOverflow) {
       .skipProposal()
       .checkVerifiedProposal(
           [](auto &proposal) { ASSERT_EQ(proposal->transactions().size(), 0); })
+      .checkBlock(check(0))
       .done();
 }
 
