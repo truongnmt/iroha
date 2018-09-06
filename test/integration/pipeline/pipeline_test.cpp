@@ -27,8 +27,6 @@
 #include "integration/acceptance/acceptance_fixture.hpp"
 #include "utils/query_error_response_visitor.hpp"
 
-using ::testing::IsEmpty;
-
 class PipelineIntegrationTest : public AcceptanceFixture {
  public:
   /**
@@ -207,8 +205,8 @@ TEST_F(PipelineIntegrationTest, SendTxSequenceAwait) {
  *
  * @given createFirstDomain and createSecondDomain transactions
  * @when first domain is created second time
- * @then block with no transactions is created @and after that
- * createSecondDomain transaction can be executed and applied
+ * @then block with no transactions is created
+ * AND after that createSecondDomain transaction can be executed and applied
  */
 TEST_F(PipelineIntegrationTest, SuccessfulCommitAfterEmptyBlock) {
   auto createFirstDomain = [this] {
