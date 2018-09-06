@@ -20,6 +20,8 @@
 
 #include <mutex>
 
+#include <rxcpp/rx.hpp>
+
 #include "builders/default_builders.hpp"
 #include "interfaces/transaction_responses/tx_response.hpp"
 #include "logger/logger.hpp"
@@ -41,10 +43,6 @@ namespace iroha {
           std::shared_ptr<network::PeerCommunicationService> pcs,
           std::shared_ptr<MstProcessor> mst_processor,
           std::shared_ptr<iroha::torii::StatusBus> status_bus);
-
-      void transactionHandle(
-          std::shared_ptr<shared_model::interface::Transaction> transaction)
-          const override;
 
       void batchHandle(const shared_model::interface::TransactionBatch
                            &transaction_batch) const override;

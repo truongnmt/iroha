@@ -6,10 +6,6 @@
 #include <gtest/gtest.h>
 
 #include <boost/range/irange.hpp>
-#include "builders/protobuf/block.hpp"
-#include "builders/protobuf/block_variant_transport_builder.hpp"
-#include "builders/protobuf/empty_block.hpp"
-#include "builders/protobuf/proposal.hpp"
 #include "builders/protobuf/queries.hpp"
 #include "builders/protobuf/transaction.hpp"
 #include "builders/protobuf/transaction_sequence_builder.hpp"
@@ -20,6 +16,10 @@
 #include "framework/result_fixture.hpp"
 #include "interfaces/common_objects/types.hpp"
 #include "interfaces/iroha_internal/transaction_sequence.hpp"
+#include "module/shared_model/builders/protobuf/block.hpp"
+#include "module/shared_model/builders/protobuf/block_variant_transport_builder.hpp"
+#include "module/shared_model/builders/protobuf/empty_block.hpp"
+#include "module/shared_model/builders/protobuf/proposal.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_empty_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
@@ -450,14 +450,13 @@ TEST_F(TransportBuilderTest, BlockVariantWithInvalidBlock) {
  * @given empty range of transactions
  * @when TransportBuilder tries to build TransactionSequence object
  * @then built object contains TransactionSequence shared model object
- * AND it containcs 0 transactions
+ * AND object will not created
  */
 TEST_F(TransportBuilderTest, TransactionSequenceEmpty) {
   iroha::protocol::TxList tx_list;
   auto val =
       framework::expected::val(TransactionSequenceBuilder().build(tx_list));
-  ASSERT_TRUE(val);
-  val | [](auto &seq) { EXPECT_EQ(boost::size(seq.value.transactions()), 0); };
+  ASSERT_FALSE(val);
 }
 
 struct getProtocolTx {

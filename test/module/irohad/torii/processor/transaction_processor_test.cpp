@@ -4,16 +4,17 @@
  */
 
 #include <boost/range/join.hpp>
-#include "builders/protobuf/common_objects/proto_signature_builder.hpp"
-#include "builders/protobuf/proposal.hpp"
 #include "builders/protobuf/transaction.hpp"
 #include "framework/batch_helper.hpp"
 #include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
+#include "interfaces/iroha_internal/transaction_batch.hpp"
 #include "interfaces/iroha_internal/transaction_sequence.hpp"
 #include "module/irohad/multi_sig_transactions/mst_mocks.hpp"
 #include "module/irohad/network/network_mocks.hpp"
 #include "module/irohad/torii/torii_mocks.hpp"
+#include "module/shared_model/builders/protobuf/common_objects/proto_signature_builder.hpp"
+#include "module/shared_model/builders/protobuf/proposal.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_proposal_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
@@ -30,6 +31,8 @@ using ::testing::_;
 using ::testing::A;
 using ::testing::Return;
 
+using shared_model::interface::TransactionBatch;
+
 class TransactionProcessorTest : public ::testing::Test {
  public:
   void SetUp() override {
@@ -43,9 +46,9 @@ class TransactionProcessorTest : public ::testing::Test {
     EXPECT_CALL(*pcs, on_verified_proposal())
         .WillRepeatedly(Return(verified_prop_notifier.get_observable()));
 
-    EXPECT_CALL(*mp, onPreparedTransactionsImpl())
+    EXPECT_CALL(*mp, onPreparedBatchesImpl())
         .WillRepeatedly(Return(mst_prepared_notifier.get_observable()));
-    EXPECT_CALL(*mp, onExpiredTransactionsImpl())
+    EXPECT_CALL(*mp, onExpiredBatchesImpl())
         .WillRepeatedly(Return(mst_expired_notifier.get_observable()));
 
     status_bus = std::make_shared<MockStatusBus>();
@@ -142,7 +145,7 @@ class TransactionProcessorTest : public ::testing::Test {
 TEST_F(TransactionProcessorTest, TransactionProcessorOnProposalTest) {
   std::vector<shared_model::proto::Transaction> txs;
   for (size_t i = 0; i < proposal_size; i++) {
-    auto &&tx = TestTransactionBuilder().createdTime(i).build();
+    auto &&tx = addSignaturesFromKeyPairs(baseTestTx(), makeKey());
     txs.push_back(tx);
     status_map[tx.hash()] =
         status_builder.notReceived().txHash(tx.hash()).build();
@@ -158,8 +161,8 @@ TEST_F(TransactionProcessorTest, TransactionProcessorOnProposalTest) {
   EXPECT_CALL(*pcs, propagate_batch(_)).Times(txs.size());
 
   for (const auto &tx : txs) {
-    tp->transactionHandle(
-        std::shared_ptr<shared_model::interface::Transaction>(clone(tx)));
+    tp->batchHandle(framework::batch::createBatchFromSingleTransaction(
+        std::shared_ptr<shared_model::interface::Transaction>(clone(tx))));
   }
 
   // create proposal and notify about it
@@ -198,7 +201,7 @@ TEST_F(TransactionProcessorTest, TransactionProcessorOnProposalBatchTest) {
   auto transaction_sequence =
       framework::expected::val(transaction_sequence_result).value().value;
 
-  EXPECT_CALL(*mp, propagateTransactionImpl(_)).Times(0);
+  EXPECT_CALL(*mp, propagateBatchImpl(_)).Times(0);
   EXPECT_CALL(*pcs, propagate_batch(_))
       .Times(transaction_sequence.batches().size());
 
@@ -253,8 +256,8 @@ TEST_F(TransactionProcessorTest, TransactionProcessorBlockCreatedTest) {
   EXPECT_CALL(*pcs, propagate_batch(_)).Times(txs.size());
 
   for (const auto &tx : txs) {
-    tp->transactionHandle(
-        std::shared_ptr<shared_model::interface::Transaction>(clone(tx)));
+    tp->batchHandle(framework::batch::createBatchFromSingleTransaction(
+        std::shared_ptr<shared_model::interface::Transaction>(clone(tx))));
   }
 
   // 1. Create proposal and notify transaction processor about it
@@ -313,8 +316,8 @@ TEST_F(TransactionProcessorTest, TransactionProcessorOnCommitTest) {
   EXPECT_CALL(*pcs, propagate_batch(_)).Times(txs.size());
 
   for (const auto &tx : txs) {
-    tp->transactionHandle(
-        std::shared_ptr<shared_model::interface::Transaction>(clone(tx)));
+    tp->batchHandle(framework::batch::createBatchFromSingleTransaction(
+        std::shared_ptr<shared_model::interface::Transaction>(clone(tx))));
   }
 
   // 1. Create proposal and notify transaction processor about it
@@ -483,6 +486,8 @@ TEST_F(TransactionProcessorTest, MultisigExpired) {
                 shared_model::interface::MstExpiredResponse>(),
             response->get()));
       }));
-  tp->transactionHandle(tx);
-  mst_expired_notifier.get_subscriber().on_next(tx);
+  tp->batchHandle(framework::batch::createBatchFromSingleTransaction(tx));
+  mst_expired_notifier.get_subscriber().on_next(
+      std::make_shared<shared_model::interface::TransactionBatch>(
+          framework::batch::createBatchFromSingleTransaction(tx)));
 }

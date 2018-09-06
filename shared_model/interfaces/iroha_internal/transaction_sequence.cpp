@@ -6,8 +6,8 @@
 #include "interfaces/iroha_internal/transaction_sequence.hpp"
 
 #include "interfaces/iroha_internal/transaction_batch.hpp"
+#include "interfaces/iroha_internal/transaction_batch_factory.hpp"
 #include "validators/default_validator.hpp"
-
 
 namespace shared_model {
   namespace interface {
@@ -25,7 +25,7 @@ namespace shared_model {
           extracted_batches;
       std::vector<TransactionBatch> batches;
 
-      auto transaction_validator = validator.getTransactionValidator();
+      const auto &transaction_validator = validator.getTransactionValidator();
 
       auto insert_batch =
           [&batches](const iroha::expected::Value<TransactionBatch> &value) {
@@ -33,13 +33,18 @@ namespace shared_model {
           };
 
       validation::Answer result;
+      if (transactions.size() == 0) {
+        result.addReason(std::make_pair(
+            "Transaction collection error",
+            std::vector<std::string>{"sequence can not be empty"}));
+      }
       for (const auto &tx : transactions) {
         if (auto meta = tx->batchMeta()) {
           auto hashes = meta.get()->reducedHashes();
           auto batch_hash = TransactionBatch::calculateReducedBatchHash(hashes);
           extracted_batches[batch_hash].push_back(tx);
         } else {
-          TransactionBatch::createTransactionBatch<TransactionValidator,
+          TransactionBatchFactory::createTransactionBatch<TransactionValidator,
                                                    FieldValidator>(
               tx, transaction_validator, field_validator)
               .match(insert_batch, [&tx, &result](const auto &err) {
@@ -52,7 +57,7 @@ namespace shared_model {
       }
 
       for (const auto &it : extracted_batches) {
-        TransactionBatch::createTransactionBatch(it.second, validator)
+        TransactionBatchFactory::createTransactionBatch(it.second, validator)
             .match(insert_batch, [&it, &result](const auto &err) {
               result.addReason(std::make_pair(
                   it.first.toString(), std::vector<std::string>{err.error}));
