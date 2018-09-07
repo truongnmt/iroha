@@ -86,7 +86,7 @@ namespace iroha_cli {
       const auto can_roles = "Can create/append roles";
 
       command_params_map_ = {
-          {ADD_ASSET_QTY, makeParamsDescription({acc_id, ast_id, amount_str})},
+          {ADD_ASSET_QTY, makeParamsDescription({ast_id, amount_str})},
           {ADD_PEER, makeParamsDescription({peer_id, pub_key})},
           {ADD_SIGN, makeParamsDescription({acc_id, pub_key})},
           {CREATE_ACC, makeParamsDescription({acc_name, dom_id, pub_key})},
