@@ -22,8 +22,8 @@
 
 namespace shared_model {
   namespace interface {
-    class BlockVariant;
-  }  // namespace interface
+    class Block;
+  }
 }  // namespace shared_model
 
 namespace iroha {
@@ -36,14 +36,14 @@ namespace iroha {
       /**
        * Providing data for consensus for voting
        */
-      virtual void vote(const shared_model::interface::BlockVariant &) = 0;
+      virtual void vote(const shared_model::interface::Block &) = 0;
 
       /**
        * Emit committed blocks
        * Note: committed block may be not satisfy for top block in ledger
        * because synchronization reasons
        */
-      virtual rxcpp::observable<shared_model::interface::BlockVariant>
+      virtual rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
       on_commit() = 0;
 
       virtual ~ConsensusGate() = default;

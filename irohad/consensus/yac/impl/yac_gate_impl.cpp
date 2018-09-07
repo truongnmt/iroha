@@ -49,11 +49,10 @@ namespace iroha {
             consensus_result_cache_(std::move(consensus_result_cache)),
             log_(logger::log("YacGate")) {
         block_creator_->on_block().subscribe(
-            [this](const auto &block) { this->vote(block); });
+            [this](auto block) { this->vote(*block); });
       }
 
-      void YacGateImpl::vote(
-          const shared_model::interface::BlockVariant &block) {
+      void YacGateImpl::vote(const shared_model::interface::Block &block) {
         auto hash = hash_provider_->makeHash(block);
         log_->info("vote for block ({}, {})",
                    hash.proposal_hash,
@@ -63,23 +62,23 @@ namespace iroha {
           log_->error("ordering doesn't provide peers => pass round");
           return;
         }
-        current_block_ = std::make_pair(hash, block);
+        std::shared_ptr<shared_model::interface::Block> shp_block(clone(block));
+        current_block_ = std::make_pair(hash, shp_block);
         hash_gate_->vote(hash, *order);
 
         // insert the block we voted for to the consensus cache
-        consensus_result_cache_->insert(
-            std::make_shared<ConsensusResult>(block));
+        consensus_result_cache_->insert(shp_block);
       }
 
-      rxcpp::observable<shared_model::interface::BlockVariant>
+      rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>
       YacGateImpl::on_commit() {
         return hash_gate_->onOutcome().flat_map([this](auto message) {
           // TODO 10.06.2018 andrei: IR-497 Work on reject case
           auto commit_message = boost::get<CommitMessage>(message);
           // map commit to block if it is present or loaded from other peer
-          return rxcpp::observable<>::create<
-              shared_model::interface::BlockVariant>([this, commit_message](
-                                                         auto subscriber) {
+          return rxcpp::observable<>::create<std::shared_ptr<
+              shared_model::interface::Block>>([this, commit_message](
+                                                   auto subscriber) {
             const auto hash = getHash(commit_message.votes);
             if (not hash) {
               log_->info("Invalid commit message, hashes are different");
@@ -91,8 +90,8 @@ namespace iroha {
               // append signatures of other nodes
               this->copySignatures(commit_message);
               log_->info("consensus: commit top block: height {}, hash {}",
-                         current_block_.second.height(),
-                         current_block_.second.hash().hex());
+                         current_block_.second->height(),
+                         current_block_.second->hash().hex());
               subscriber.on_next(current_block_.second);
               subscriber.on_completed();
               return;
@@ -105,7 +104,7 @@ namespace iroha {
                 .flat_map([this, model_hash](auto vote) {
                   // map vote to block if it can be loaded
                   return rxcpp::observable<>::create<
-                      shared_model::interface::BlockVariant>(
+                      std::shared_ptr<shared_model::interface::Block>>(
                       [this, model_hash, vote](auto subscriber) {
                         auto block = block_loader_->retrieveBlock(
                             vote.signature->publicKey(),
@@ -113,9 +112,10 @@ namespace iroha {
                         // if load is successful
                         if (block) {
                           // update the cache with block consensus voted for
-                          consensus_result_cache_->insert(
-                              std::make_shared<ConsensusResult>(*block));
+                          consensus_result_cache_->insert(*block);
                           subscriber.on_next(*block);
+                        } else {
+                          log_->error("Could not get block from block loader");
                         }
                         subscriber.on_completed();
                       });
@@ -141,8 +141,8 @@ namespace iroha {
       void YacGateImpl::copySignatures(const CommitMessage &commit) {
         for (const auto &vote : commit.votes) {
           auto sig = vote.hash.block_signature;
-          current_block_.second.addSignature(sig->signedData(),
-                                             sig->publicKey());
+          current_block_.second->addSignature(sig->signedData(),
+                                              sig->publicKey());
         }
       }
     }  // namespace yac
