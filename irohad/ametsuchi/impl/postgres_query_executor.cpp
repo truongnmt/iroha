@@ -10,11 +10,8 @@
 #include <soci/postgresql/soci-postgresql.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
-#include <boost/optional/optional_io.hpp>
 #include <boost/range/algorithm/for_each.hpp>
 #include <boost/range/algorithm/transform.hpp>
-
-#include "ametsuchi/impl/soci_utils.hpp"
 #include "common/types.hpp"
 #include "converters/protobuf/json_proto_converter.hpp"
 #include "interfaces/queries/blocks_query.hpp"
@@ -66,11 +63,10 @@ namespace {
             -> boost::optional<std::shared_ptr<T>> { return boost::none; });
   }
 
-  boost::optional<std::string> getDomainFromName(
-      const std::string &account_id) {
+  std::string getDomainFromName(const std::string &account_id) {
     std::vector<std::string> res;
     boost::split(res, account_id, boost::is_any_of("@"));
-    return res.size() > 1 ? boost::make_optional(res.at(1)) : boost::none;
+    return res.at(1);
   }
 
   std::string checkAccountRolePermission(
@@ -159,6 +155,14 @@ namespace {
               clone(block->transactions()[x]));
         });
   }
+
+  template <typename... Value>
+  using SinglePermReturnType = boost::tuple<boost::optional<Value>..., int>;
+
+  template <typename... Value>
+  using DoublePermReturnType =
+      boost::tuple<boost::optional<Value>..., int, int>;
+
 }  // namespace
 
 namespace iroha {
@@ -183,17 +187,14 @@ namespace iroha {
 
     bool PostgresQueryExecutor::validate(
         const shared_model::interface::BlocksQuery &query) {
+      using T = SinglePermReturnType<>;
       boost::format cmd(R"(%s)");
-      soci::statement st =
+      soci::rowset<T> st =
           (sql_->prepare
-           << (cmd % checkAccountRolePermission(Role::kGetBlocks)).str());
-      int has_perm;
-      st.exchange(soci::use(query.creatorAccountId(), "role_account_id"));
-      st.exchange(soci::into(has_perm));
-      st.define_and_bind();
-      st.execute(true);
+               << (cmd % checkAccountRolePermission(Role::kGetBlocks)).str(),
+           soci::use(query.creatorAccountId(), "role_account_id"));
 
-      return has_perm > 0;
+      return st.begin()->get<0>();
     }
 
     PostgresQueryExecutorVisitor::PostgresQueryExecutorVisitor(
@@ -213,14 +214,13 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAccount &q) {
-      using T = boost::tuple<
-          boost::optional<shared_model::interface::types::AccountIdType>,
-          boost::optional<shared_model::interface::types::DomainIdType>,
-          boost::optional<shared_model::interface::types::QuorumType>,
-          boost::optional<shared_model::interface::types::DetailType>,
-          boost::optional<shared_model::interface::types::RoleIdType>,
-          int>;
-      T tuple;
+      using T =
+          SinglePermReturnType<shared_model::interface::types::AccountIdType,
+                               shared_model::interface::types::DomainIdType,
+                               shared_model::interface::types::QuorumType,
+                               shared_model::interface::types::DetailType,
+                               shared_model::interface::types::RoleIdType>;
+
       auto cmd = (boost::format(R"(WITH has_perms AS (%s),
       t AS (
           SELECT a.account_id, a.domain_id, a.quorum, a.data, ARRAY_AGG(ar.role_id) AS roles
@@ -238,18 +238,16 @@ namespace iroha {
                                        Role::kGetAllAccounts,
                                        Role::kGetDomainAccounts))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId(), "target_account_id"));
-      st.exchange(soci::into(tuple));
 
-      st.define_and_bind();
-      st.execute(true);
+      soci::rowset<T> st =
+          (sql_.prepare << cmd, soci::use(q.accountId(), "target_account_id"));
+      auto &tuple = *st.begin();
 
       if (not tuple.get<5>()) {
         return statefulFailed();
       }
 
-      if (not tuple.get<0>().is_initialized()) {
+      if (not tuple.get<0>()) {
         return buildError<shared_model::interface::NoAccountErrorResponse>();
       }
 
@@ -278,9 +276,8 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetSignatories &q) {
-      std::vector<shared_model::interface::types::PubkeyType> pubkeys;
-      soci::indicator ind;
-      boost::tuple<boost::optional<std::string>, int> row;
+      using T = SinglePermReturnType<std::string>;
+
       auto cmd = (boost::format(R"(WITH has_perms AS (%s),
       t AS (
           SELECT public_key FROM account_has_signatory
@@ -295,30 +292,18 @@ namespace iroha {
                                        Role::kGetAllSignatories,
                                        Role::kGetDomainSignatories))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId()));
-      st.exchange(soci::into(row, ind));
 
-      st.define_and_bind();
-      st.execute();
+      soci::rowset<T> st = (sql_.prepare << cmd, soci::use(q.accountId()));
 
-      int has_perm = -1;
-
-      processSoci(st,
-                  ind,
-                  row,
-                  [&pubkeys, &has_perm](
-                      boost::tuple<boost::optional<std::string>, int> &row) {
-                    has_perm = row.get<1>();
-                    if (row.get<0>()) {
-                      pubkeys.push_back(shared_model::crypto::PublicKey(
-                          shared_model::crypto::Blob::fromHexString(
-                              row.get<0>().get())));
-                    }
-                  });
-
-      if (not has_perm) {
-        return statefulFailed();
+      std::vector<shared_model::interface::types::PubkeyType> pubkeys;
+      for (auto &t : st) {
+        if (not t.get<1>()) {
+          return statefulFailed();
+        }
+        t.get<0>() | [&pubkeys](auto &pubkey) {
+          pubkeys.push_back(shared_model::crypto::PublicKey(
+              shared_model::crypto::Blob::fromHexString(pubkey)));
+        };
       }
 
       if (pubkeys.empty()) {
@@ -330,10 +315,8 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAccountTransactions &q) {
-      soci::indicator ind;
-      using T = boost::
-          tuple<boost::optional<uint64_t>, boost::optional<uint64_t>, int>;
-      T row;
+      using T = SinglePermReturnType<uint64_t, uint64_t>;
+
       auto cmd = (boost::format(R"(WITH has_perms AS (%s),
       t AS (
           SELECT DISTINCT has.height, index
@@ -352,29 +335,16 @@ namespace iroha {
                                        Role::kGetAllAccTxs,
                                        Role::kGetDomainAccTxs))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId()));
-      st.exchange(soci::into(row, ind));
-
-      st.define_and_bind();
-      st.execute();
-
-      int has_perm = -1;
+      soci::rowset<T> st = (sql_.prepare << cmd, soci::use(q.accountId()));
 
       std::map<uint64_t, std::vector<uint64_t>> index;
-
-      processSoci(st, ind, row, [&index, &has_perm](T &row) {
-        has_perm = row.get<2>();
-        if (row.get<0>()) {
-          if (index.find(row.get<0>().get()) == index.end()) {
-            index[row.get<0>().get()] = std::vector<uint64_t>();
-          }
-          index[row.get<0>().get()].push_back(row.get<1>().get());
+      for (auto &t : st) {
+        if (not t.get<2>()) {
+          return statefulFailed();
         }
-      });
-
-      if (not has_perm) {
-        return statefulFailed();
+        t.get<0>() | [&index, &t](auto &height) {
+          index[height].push_back(t.get<1>().get());
+        };
       }
 
       std::vector<shared_model::proto::Transaction> proto;
@@ -407,13 +377,9 @@ namespace iroha {
         hash_str += "'" + q.transactionHashes()[i].hex() + "'";
       }
 
-      soci::indicator ind;
-      using T = boost::tuple<
-          boost::optional<shared_model::interface::types::HeightType>,
-          boost::optional<std::string>,
-          int,
-          int>;
-      T row;
+      using T = DoublePermReturnType<shared_model::interface::types::HeightType,
+                                     std::string>;
+
       auto cmd = (boost::format(R"(WITH has_my_perm AS (%s),
       has_all_perm AS (%s),
       t AS (
@@ -426,34 +392,22 @@ namespace iroha {
                   % checkAccountRolePermission(Role::kGetAllTxs, "account_id")
                   % hash_str)
                      .str();
-      auto s = sql_.prepare << cmd;
+      soci::rowset<T> st =
+          (sql_.prepare << cmd, soci::use(creator_id_, "account_id"));
+
       int has_my_perm = -1;
       int has_all_perm = -1;
       std::map<uint64_t, std::vector<std::string>> index;
-      soci::statement st = s;
-      st.exchange(soci::use(creator_id_, "account_id"));
-      st.exchange(soci::into(row, ind));
 
-      st.define_and_bind();
-      try {
-        st.execute();
-      } catch (std::exception &e) {
-        e.what();
-      }
-
-      processSoci(st, ind, row, [&](T &row) {
-        has_my_perm = row.get<2>();
-        has_all_perm = row.get<3>();
-        if (row.get<0>()) {
-          if (index.find(row.get<0>().get()) == index.end()) {
-            index[row.get<0>().get()] = std::vector<std::string>();
-          }
-          index[row.get<0>().get()].push_back(row.get<1>().get());
+      for (auto &t : st) {
+        has_my_perm = t.get<2>();
+        has_all_perm = t.get<3>();
+        if (not has_my_perm and not has_all_perm) {
+          return statefulFailed();
         }
-      });
-
-      if (not has_my_perm and not has_all_perm) {
-        return statefulFailed();
+        t.get<0>() | [&index, &t](auto &height) {
+          index[height].push_back(t.get<1>().get());
+        };
       }
 
       std::vector<shared_model::proto::Transaction> proto;
@@ -496,10 +450,8 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAccountAssetTransactions &q) {
-      soci::indicator ind;
-      using T = boost::
-          tuple<boost::optional<uint64_t>, boost::optional<uint64_t>, int>;
-      T row;
+      using T = SinglePermReturnType<uint64_t, uint64_t>;
+
       auto cmd = (boost::format(R"(WITH has_perms AS (%s),
       t AS (
           SELECT DISTINCT has.height, index
@@ -519,30 +471,19 @@ namespace iroha {
                                        Role::kGetAllAccAstTxs,
                                        Role::kGetDomainAccAstTxs))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId(), "account_id"));
-      st.exchange(soci::use(q.assetId(), "asset_id"));
-      st.exchange(soci::into(row, ind));
 
-      st.define_and_bind();
-      st.execute();
-
-      int has_perm = -1;
+      soci::rowset<T> st = (sql_.prepare << cmd,
+                            soci::use(q.accountId(), "account_id"),
+                            soci::use(q.assetId(), "asset_id"));
 
       std::map<uint64_t, std::vector<uint64_t>> index;
-
-      processSoci(st, ind, row, [&index, &has_perm](T &row) {
-        has_perm = row.get<2>();
-        if (row.get<0>()) {
-          if (index.find(row.get<0>().get()) == index.end()) {
-            index[row.get<0>().get()] = std::vector<uint64_t>();
-          }
-          index[row.get<0>().get()].push_back(row.get<1>().get());
+      for (auto &t : st) {
+        if (not t.get<2>()) {
+          return statefulFailed();
         }
-      });
-
-      if (not has_perm) {
-        return statefulFailed();
+        t.get<0>() | [&index, &t](auto &height) {
+          index[height].push_back(t.get<1>().get());
+        };
       }
 
       std::vector<shared_model::proto::Transaction> proto;
@@ -566,13 +507,11 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAccountAssets &q) {
-      soci::indicator ind;
-      using T = boost::tuple<
-          boost::optional<shared_model::interface::types::AccountIdType>,
-          boost::optional<shared_model::interface::types::AssetIdType>,
-          boost::optional<std::string>,
-          int>;
-      T row;
+      using T =
+          SinglePermReturnType<shared_model::interface::types::AccountIdType,
+                               shared_model::interface::types::AssetIdType,
+                               std::string>;
+
       auto cmd = (boost::format(R"(WITH has_perms AS (%s),
       t AS (
           SELECT * FROM account_has_asset
@@ -587,42 +526,34 @@ namespace iroha {
                                        Role::kGetAllAccAst,
                                        Role::kGetDomainAccAst))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId()));
-      st.exchange(soci::into(row, ind));
-
-      st.define_and_bind();
-      st.execute();
-
-      int has_perm = -1;
+      soci::rowset<T> st = (sql_.prepare << cmd, soci::use(q.accountId()));
 
       std::vector<shared_model::proto::AccountAsset> account_assets;
-      processSoci(st, ind, row, [&account_assets, &has_perm, this](T &row) {
-        has_perm = row.get<3>();
-        if (row.get<0>()) {
+      for (auto &t : st) {
+        if (not t.get<3>()) {
+          return statefulFailed();
+        }
+        t.get<0>() | [&account_assets, &t, this](auto &account_id) {
           fromResult(factory_->createAccountAsset(
-              row.get<0>().get(),
-              row.get<1>().get(),
-              shared_model::interface::Amount(row.get<2>().get())))
+              account_id,
+              t.get<1>().get(),
+              shared_model::interface::Amount(t.get<2>().get())))
               | [&account_assets](const auto &asset) {
                   auto proto = *std::static_pointer_cast<
                       shared_model::proto::AccountAsset>(asset);
                   account_assets.push_back(proto);
                 };
-        }
-      });
-
-      if (not has_perm) {
-        return statefulFailed();
+        };
       }
+
       return QueryResponseBuilder().accountAssetResponse(account_assets);
     }
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAccountDetail &q) {
-      boost::tuple<boost::optional<shared_model::interface::types::DetailType>,
-                   int>
-          row;
+      using T =
+          SinglePermReturnType<shared_model::interface::types::DetailType>;
+
       std::string query_detail;
       if (q.key() and q.writer()) {
         auto filled_json = (boost::format("{\"%s\", \"%s\"}") % q.writer().get()
@@ -665,59 +596,47 @@ namespace iroha {
                                        Role::kGetDomainAccDetail)
                   % query_detail)
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(q.accountId(), "account_id"));
-      st.exchange(soci::into(row));
+      soci::rowset<T> st =
+          (sql_.prepare << cmd, soci::use(q.accountId(), "account_id"));
+      auto &tuple = *st.begin();
 
-      st.define_and_bind();
-      st.execute(true);
-
-      if (not row.get<1>()) {
+      if (not tuple.get<1>()) {
         return statefulFailed();
       }
 
-      if (not row.get<0>().is_initialized()) {
+      if (not tuple.get<0>()) {
         return buildError<
             shared_model::interface::NoAccountDetailErrorResponse>();
       }
 
       auto response =
-          QueryResponseBuilder().accountDetailResponse(row.get<0>().get());
+          QueryResponseBuilder().accountDetailResponse(tuple.get<0>().get());
       return response;
     }
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetRoles &q) {
-      soci::indicator ind;
-      using T = boost::tuple<
-          boost::optional<shared_model::interface::types::RoleIdType>,
-          int>;
-      T row;
+      using T =
+          SinglePermReturnType<shared_model::interface::types::RoleIdType>;
+
       auto cmd = (boost::format(
                       R"(WITH has_perms AS (%s)
       SELECT role_id, perm FROM role
       RIGHT OUTER JOIN has_perms ON TRUE
       )") % checkAccountRolePermission(Role::kGetRoles))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(creator_id_, "role_account_id"));
-      st.exchange(soci::into(row, ind));
-
-      st.define_and_bind();
-      st.execute();
+      soci::rowset<T> st =
+          (sql_.prepare << cmd, soci::use(creator_id_, "role_account_id"));
 
       std::vector<shared_model::interface::types::RoleIdType> roles;
-      int has_perm;
 
-      processSoci(st, ind, row, [&roles, &has_perm](T &row) {
-        has_perm = row.get<1>();
-        if (row.get<0>().is_initialized()) {
-          roles.push_back(row.get<0>().get());
+      for (auto &t : st) {
+        if (not t.get<1>()) {
+          return statefulFailed();
         }
-      });
-
-      if (not has_perm) {
-        return statefulFailed();
+        if (t.get<0>()) {
+          roles.push_back(t.get<0>().get());
+        }
       }
 
       if (roles.empty()) {
@@ -729,8 +648,8 @@ namespace iroha {
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetRolePermissions &q) {
-      using T = boost::tuple<boost::optional<std::string>, int>;
-      T row;
+      using T = SinglePermReturnType<std::string>;
+
       auto cmd = (boost::format(
                       R"(WITH has_perms AS (%s),
       perms AS (SELECT permission FROM role_has_permissions
@@ -739,32 +658,30 @@ namespace iroha {
       RIGHT OUTER JOIN has_perms ON TRUE
       )") % checkAccountRolePermission(Role::kGetRoles))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(creator_id_, "role_account_id"));
-      st.exchange(soci::use(q.roleId(), "role_name"));
-      st.exchange(soci::into(row));
+
+      soci::rowset<T> st = (sql_.prepare << cmd,
+                            soci::use(creator_id_, "role_account_id"),
+                            soci::use(q.roleId(), "role_name"));
+      auto &tuple = *st.begin();
+
       shared_model::interface::RolePermissionSet set;
 
-      st.define_and_bind();
-      st.execute(true);
-
-      if (not row.get<1>()) {
+      if (not tuple.get<1>()) {
         return statefulFailed();
       }
 
-      if (not row.get<0>()) {
+      if (not tuple.get<0>()) {
         return buildError<shared_model::interface::NoRolesErrorResponse>();
       }
       auto response = QueryResponseBuilder().rolePermissionsResponse(
-          shared_model::interface::RolePermissionSet(row.get<0>().get()));
+          shared_model::interface::RolePermissionSet(tuple.get<0>().get()));
       return response;
     }
 
     QueryResponseBuilderDone PostgresQueryExecutorVisitor::operator()(
         const shared_model::interface::GetAssetInfo &q) {
-      using T = boost::
-          tuple<boost::optional<std::string>, boost::optional<uint32_t>, int>;
-      T row;
+      using T = SinglePermReturnType<std::string, uint32_t>;
+
       auto cmd = (boost::format(
                       R"(WITH has_perms AS (%s),
       perms AS (SELECT domain_id, precision FROM asset
@@ -773,24 +690,20 @@ namespace iroha {
       RIGHT OUTER JOIN has_perms ON TRUE
       )") % checkAccountRolePermission(Role::kReadAssets))
                      .str();
-      soci::statement st = (sql_.prepare << cmd);
-      st.exchange(soci::use(creator_id_, "role_account_id"));
-      st.exchange(soci::use(q.assetId(), "asset_id"));
-      st.exchange(soci::into(row));
-      shared_model::interface::RolePermissionSet set;
+      soci::rowset<T> st = (sql_.prepare << cmd,
+                            soci::use(creator_id_, "role_account_id"),
+                            soci::use(q.assetId(), "asset_id"));
+      auto &tuple = *st.begin();
 
-      st.define_and_bind();
-      st.execute(true);
-
-      if (not row.get<2>()) {
+      if (not tuple.get<2>()) {
         return statefulFailed();
       }
 
-      if (not row.get<0>().is_initialized()) {
+      if (not tuple.get<0>()) {
         return buildError<shared_model::interface::NoAssetErrorResponse>();
       }
       auto response = QueryResponseBuilder().assetResponse(
-          q.assetId(), row.get<0>().get(), row.get<1>().get());
+          q.assetId(), tuple.get<0>().get(), tuple.get<1>().get());
       return response;
     }
 
@@ -802,5 +715,6 @@ namespace iroha {
       auto response = QueryResponseBuilder().transactionsResponse(txs);
       return response;
     }
+
   }  // namespace ametsuchi
 }  // namespace iroha
