@@ -18,7 +18,6 @@
 #include "module/shared_model/builders/protobuf/test_query_response_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_transaction_builder.hpp"
 
-#include "execution/query_execution_impl.hpp"
 #include "framework/specified_visitor.hpp"
 #include "main/server_runner.hpp"
 #include "torii/processor/query_processor_impl.hpp"

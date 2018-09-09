@@ -691,14 +691,7 @@ namespace iroha {
                       });
               };
             });
-            return boost::make_optional<QueryResponseBuilderDone>(
-                       account_assets.empty(),
-                       buildError<shared_model::interface::
-                                      NoAccountAssetsErrorResponse>())
-                .value_or_eval([&account_assets] {
-                  return QueryResponseBuilder().accountAssetResponse(
-                      account_assets);
-                });
+            return QueryResponseBuilder().accountAssetResponse(account_assets);
           });
     }
 

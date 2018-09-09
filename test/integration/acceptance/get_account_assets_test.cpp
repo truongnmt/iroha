@@ -31,7 +31,8 @@ class GetAccountAssets : public AcceptanceFixture {
 
   /// Create command for adding assets
   auto addAssets() {
-    return complete(AcceptanceFixture::baseTx().addAssetQuantity(kAssetId, "1"));
+    return complete(
+        AcceptanceFixture::baseTx().addAssetQuantity(kAssetId, "1"));
   }
 
   /// Create command for removing assets
@@ -58,7 +59,7 @@ class GetAccountAssets : public AcceptanceFixture {
                 query_response.get());
 
             ASSERT_EQ(resp.accountAssets().size(), quantity);
-          });
+          }) << query_response.toString();
         };
   }
 

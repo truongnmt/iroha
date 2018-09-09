@@ -18,7 +18,6 @@
 
 #include "client.hpp"
 
-#include "execution/query_execution_impl.hpp"
 #include "main/server_runner.hpp"
 #include "torii/command_service.hpp"
 #include "torii/impl/status_bus_impl.hpp"

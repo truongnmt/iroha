@@ -10,7 +10,6 @@
 #include "backend/protobuf/proto_block_json_converter.hpp"
 #include "backend/protobuf/proto_proposal_factory.hpp"
 #include "consensus/yac/impl/supermajority_checker_impl.hpp"
-#include "execution/query_execution_impl.hpp"
 #include "multi_sig_transactions/gossip_propagation_strategy.hpp"
 #include "multi_sig_transactions/mst_processor_impl.hpp"
 #include "multi_sig_transactions/mst_processor_stub.hpp"

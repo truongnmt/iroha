@@ -593,7 +593,7 @@ namespace iroha {
      * @when get account assets of non existing account
      * @then Return error
      */
-    TEST_F(GetAccountAssetExecutorTest, InvalidNoAccount) {
+    TEST_F(GetAccountAssetExecutorTest, DISABLED_InvalidNoAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccAst});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -1264,7 +1264,7 @@ namespace iroha {
      * @when get account transactions of non existing account
      * @then Return empty account transactions
      */
-    TEST_F(GetAccountTransactionsExecutorTest, NoAccount) {
+    TEST_F(GetAccountTransactionsExecutorTest, DISABLED_InvalidNoAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccTxs});
 
       auto query = TestQueryBuilder()
@@ -1272,13 +1272,10 @@ namespace iroha {
                        .getAccountTransactions("some@domain")
                        .build();
       auto result = executeQuery(query);
-      ASSERT_NO_THROW({
-        const auto &cast_resp = boost::apply_visitor(
-            framework::SpecifiedVisitor<
-                shared_model::interface::TransactionsResponse>(),
-            result->get());
-        ASSERT_EQ(cast_resp.transactions().size(), 0);
-      });
+      ASSERT_TRUE(boost::apply_visitor(
+          shared_model::interface::QueryErrorResponseChecker<
+              shared_model::interface::StatefulFailedErrorResponse>(),
+          result->get()));
     }
 
     class GetTransactionsHashExecutorTest : public GetTransactionsExecutorTest {

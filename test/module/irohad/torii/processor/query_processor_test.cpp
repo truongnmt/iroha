@@ -7,7 +7,6 @@
 #include "backend/protobuf/query_responses/proto_error_query_response.hpp"
 #include "cryptography/crypto_provider/crypto_defaults.hpp"
 #include "cryptography/keypair.hpp"
-#include "execution/query_execution.hpp"
 #include "framework/specified_visitor.hpp"
 #include "framework/test_subscriber.hpp"
 #include "interfaces/query_responses/block_query_response.hpp"

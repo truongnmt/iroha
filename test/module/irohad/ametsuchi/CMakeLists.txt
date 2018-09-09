@@ -54,6 +54,7 @@ target_link_libraries(storage_init_test
     ametsuchi
     libs_common
     integration_framework_config_helper
+    shared_model_proto_backend
     )
 
 addtest(postgres_options_test postgres_options_test.cpp)
