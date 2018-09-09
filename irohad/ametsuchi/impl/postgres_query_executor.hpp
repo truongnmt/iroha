@@ -8,8 +8,8 @@
 
 #include "ametsuchi/query_executor.hpp"
 
-#include "ametsuchi/key_value_storage.hpp"
 #include "ametsuchi/impl/soci_utils.hpp"
+#include "ametsuchi/key_value_storage.hpp"
 #include "ametsuchi/storage.hpp"
 #include "builders/protobuf/builder_templates/query_response_template.hpp"
 #include "interfaces/commands/add_asset_quantity.hpp"
@@ -36,11 +36,9 @@
 namespace iroha {
   namespace ametsuchi {
 
-    using QueryResponseBuilder =
-        shared_model::proto::TemplateQueryResponseBuilder<0>;
-
     using QueryResponseBuilderDone =
         shared_model::proto::TemplateQueryResponseBuilder<1>;
+
     class PostgresQueryExecutorVisitor
         : public boost::static_visitor<QueryResponseBuilderDone> {
      public:
@@ -97,7 +95,7 @@ namespace iroha {
 
     class PostgresQueryExecutor : public QueryExecutor {
      public:
-      explicit PostgresQueryExecutor(
+      PostgresQueryExecutor(
           std::unique_ptr<soci::session> sql,
           std::shared_ptr<shared_model::interface::CommonObjectsFactory>
               factory,

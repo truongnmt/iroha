@@ -4,6 +4,7 @@
  */
 
 #include "ametsuchi/impl/postgres_query_executor.hpp"
+
 #include "ametsuchi/impl/flat_file/flat_file.hpp"
 #include "ametsuchi/impl/postgres_command_executor.hpp"
 #include "ametsuchi/impl/postgres_wsv_query.hpp"
@@ -11,6 +12,7 @@
 #include "framework/specified_visitor.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_fixture.hpp"
 #include "module/irohad/ametsuchi/ametsuchi_mocks.hpp"
+#include "module/irohad/pending_txs_storage/pending_txs_storage_mock.hpp"
 #include "module/shared_model/builders/protobuf/test_account_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_asset_builder.hpp"
 #include "module/shared_model/builders/protobuf/test_block_builder.hpp"
@@ -43,6 +45,16 @@ namespace iroha {
             shared_model::interface::permissions::Grantable::kAddMySignatory;
         pubkey = std::make_unique<shared_model::interface::types::PubkeyType>(
             std::string('1', 32));
+
+        another_domain = clone(
+            TestDomainBuilder().domainId("andomain").defaultRole(role).build());
+        another_account =
+            clone(TestAccountBuilder()
+                      .domainId(another_domain->domainId())
+                      .accountId("id@" + another_domain->domainId())
+                      .quorum(1)
+                      .jsonData(R"({"id@andomain": {"key": "value"}})")
+                      .build());
       }
 
       void SetUp() override {
@@ -54,6 +66,7 @@ namespace iroha {
                 shared_model::validation::FieldValidator>>();
         query_executor = storage;
         executor = std::make_unique<PostgresCommandExecutor>(*sql);
+        pending_txs_storage = std::make_shared<MockPendingTransactionStorage>();
 
         ASSERT_TRUE(
             val(execute(buildCommand(TestTransactionBuilder().createRole(
@@ -67,6 +80,15 @@ namespace iroha {
             val(execute(buildCommand(TestTransactionBuilder().createAccount(
                             "id", domain->domainId(), *pubkey)),
                         true)));
+
+        ASSERT_TRUE(
+            val(execute(buildCommand(TestTransactionBuilder().createDomain(
+                            another_domain->domainId(), role)),
+                        true)));
+        ASSERT_TRUE(
+            val(execute(buildCommand(TestTransactionBuilder().createAccount(
+                            "id", another_domain->domainId(), *pubkey)),
+                        true)));
       }
 
       void TearDown() override {
@@ -75,7 +97,7 @@ namespace iroha {
       }
 
       auto executeQuery(shared_model::interface::Query &query) {
-        return query_executor->createQueryExecutor(nullptr) |
+        return query_executor->createQueryExecutor(pending_txs_storage) |
             [&query](const auto &executor) {
               return executor->validateAndExecute(query);
             };
@@ -137,8 +159,9 @@ namespace iroha {
       std::string role = "role";
       shared_model::interface::RolePermissionSet role_permissions;
       shared_model::interface::permissions::Grantable grantable_permission;
-      std::unique_ptr<shared_model::interface::Account> account;
-      std::unique_ptr<shared_model::interface::Domain> domain;
+      std::unique_ptr<shared_model::interface::Account> account,
+          another_account;
+      std::unique_ptr<shared_model::interface::Domain> domain, another_domain;
       std::unique_ptr<shared_model::interface::types::PubkeyType> pubkey;
 
       std::unique_ptr<soci::session> sql;
@@ -147,6 +170,7 @@ namespace iroha {
 
       std::shared_ptr<QueryExecutorFactory> query_executor;
       std::unique_ptr<CommandExecutor> executor;
+      std::shared_ptr<MockPendingTransactionStorage> pending_txs_storage;
 
       std::unique_ptr<KeyValueStorage> block_store;
     };
@@ -158,7 +182,7 @@ namespace iroha {
       auto blocks_query = TestBlocksQueryBuilder()
                               .creatorAccountId(account->accountId())
                               .build();
-      ASSERT_TRUE(query_executor->createQueryExecutor(nullptr) |
+      ASSERT_TRUE(query_executor->createQueryExecutor(pending_txs_storage) |
                   [&blocks_query](const auto &executor) {
                     return executor->validate(blocks_query);
                   });
@@ -168,7 +192,7 @@ namespace iroha {
       auto blocks_query = TestBlocksQueryBuilder()
                               .creatorAccountId(account->accountId())
                               .build();
-      ASSERT_FALSE(query_executor->createQueryExecutor(nullptr) |
+      ASSERT_FALSE(query_executor->createQueryExecutor(pending_txs_storage) |
                    [&blocks_query](const auto &executor) {
                      return executor->validate(blocks_query);
                    });
@@ -196,10 +220,14 @@ namespace iroha {
       std::unique_ptr<shared_model::interface::Account> account2;
     };
 
-    TEST_F(GetAccountExecutorTest, GetAccountExecutorTestValidMyAccount) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get account information
+     * @then Return account
+     */
+    TEST_F(GetAccountExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyAccount});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getAccount(account->accountId())
                        .build();
@@ -210,13 +238,17 @@ namespace iroha {
                 shared_model::interface::AccountResponse>(),
             result->get());
         ASSERT_EQ(cast_resp.account().accountId(), account->accountId());
-      });
+      }) << result->toString();
     }
 
-    TEST_F(GetAccountExecutorTest, GetAccountExecutorTestValidAllAccounts) {
+    /**
+     * @given initialized storage, global permission
+     * @when get account information about other user
+     * @then Return account
+     */
+    TEST_F(GetAccountExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccounts});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getAccount(account2->accountId())
                        .build();
@@ -227,14 +259,18 @@ namespace iroha {
                 shared_model::interface::AccountResponse>(),
             result->get());
         ASSERT_EQ(cast_resp.account().accountId(), account2->accountId());
-      });
+      }) << result->toString();
     }
 
-    TEST_F(GetAccountExecutorTest, GetAccountExecutorTestValidDomainAccount) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account information about other user in the same domain
+     * @then Return account
+     */
+    TEST_F(GetAccountExecutorTest, ValidDomainAccount) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetDomainAccounts});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getAccount(account2->accountId())
                        .build();
@@ -245,30 +281,37 @@ namespace iroha {
                 shared_model::interface::AccountResponse>(),
             result->get());
         ASSERT_EQ(cast_resp.account().accountId(), account2->accountId());
-      });
+      }) << result->toString();
     }
 
-    TEST_F(GetAccountExecutorTest, GetAccountExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account information about other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetAccountExecutorTest, InvalidDifferentDomain) {
+      addPerms(
+          {shared_model::interface::permissions::Role::kGetDomainAccounts});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
-                       .getAccount(account2->accountId())
+                       .getAccount(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
-      ASSERT_THROW(
-          {
-            boost::apply_visitor(
-                framework::SpecifiedVisitor<
-                    shared_model::interface::AccountResponse>(),
-                result->get());
-          },
-          std::runtime_error);
+      ASSERT_TRUE(boost::apply_visitor(
+          shared_model::interface::QueryErrorResponseChecker<
+              shared_model::interface::StatefulFailedErrorResponse>(),
+          result->get()))
+          << result->toString();
     }
 
-    TEST_F(GetAccountExecutorTest, GetAccountExecutorTestInvalidNoAccount) {
+    /**
+     * @given initialized storage, permission
+     * @when get account information about non existing account
+     * @then Return error
+     */
+    TEST_F(GetAccountExecutorTest, InvalidNoAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccounts});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getAccount("some@domain")
                        .build();
@@ -276,7 +319,8 @@ namespace iroha {
       ASSERT_TRUE(boost::apply_visitor(
           shared_model::interface::QueryErrorResponseChecker<
               shared_model::interface::NoAccountErrorResponse>(),
-          result->get()));
+          result->get()))
+          << result->toString();
     }
 
     class GetSignatoriesExecutorTest : public QueryExecutorTest {
@@ -301,11 +345,14 @@ namespace iroha {
       std::unique_ptr<shared_model::interface::Account> account2;
     };
 
-    TEST_F(GetSignatoriesExecutorTest,
-           GetSignatoriesExecutorTestValidMyAccount) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get signatories
+     * @then Return signatories of user
+     */
+    TEST_F(GetSignatoriesExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMySignatories});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getSignatories(account->accountId())
                        .build();
@@ -320,12 +367,15 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetSignatoriesExecutorTest,
-           GetSignatoriesExecutorTestValidAllAccounts) {
+    /**
+     * @given initialized storage, global permission
+     * @when get signatories of other user
+     * @then Return signatories
+     */
+    TEST_F(GetSignatoriesExecutorTest, ValidAllAccounts) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetAllSignatories});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getSignatories(account2->accountId())
                        .build();
@@ -340,12 +390,15 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetSignatoriesExecutorTest,
-           GetSignatoriesExecutorTestValidDomainAccount) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get signatories of other user in the same domain
+     * @then Return signatories
+     */
+    TEST_F(GetSignatoriesExecutorTest, ValidDomainAccount) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetDomainSignatories});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getSignatories(account2->accountId())
                        .build();
@@ -360,11 +413,17 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetSignatoriesExecutorTest, GetSignatoriesExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get signatories of other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetSignatoriesExecutorTest, InvalidDifferentDomain) {
+      addPerms(
+          {shared_model::interface::permissions::Role::kGetDomainAccounts});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
-                       .getSignatories(account2->accountId())
+                       .getSignatories(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
       ASSERT_TRUE(boost::apply_visitor(
@@ -373,12 +432,15 @@ namespace iroha {
           result->get()));
     }
 
-    TEST_F(GetSignatoriesExecutorTest,
-           GetSignatoriesExecutorTestInvalidNoAccount) {
+    /**
+     * @given initialized storage, permission
+     * @when get signatories of non existing account
+     * @then Return error
+     */
+    TEST_F(GetSignatoriesExecutorTest, InvalidNoAccount) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetAllSignatories});
       auto query = TestQueryBuilder()
-                       .createdTime(0)
                        .creatorAccountId(account->accountId())
                        .getSignatories("some@domain")
                        .build();
@@ -436,8 +498,12 @@ namespace iroha {
           "coin#" + domain->domainId();
     };
 
-    TEST_F(GetAccountAssetExecutorTest,
-           GetAccountAssetExecutorTestValidMyAccount) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get account assets
+     * @then Return account asset of user
+     */
+    TEST_F(GetAccountAssetExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyAccAst});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -456,8 +522,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetExecutorTest,
-           GetAccountAssetExecutorTestValidAllAccounts) {
+    /**
+     * @given initialized storage, global permission
+     * @when get account assets of other user
+     * @then Return account asset
+     */
+    TEST_F(GetAccountAssetExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccAst});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -476,8 +546,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetExecutorTest,
-           GetAccountAssetExecutorTestValidDomainAccount) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account assets of other user in the same domain
+     * @then Return account asset
+     */
+    TEST_F(GetAccountAssetExecutorTest, ValidDomainAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetDomainAccAst});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -496,16 +570,41 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetExecutorTest, GetAccountAssetExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account assets of other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetAccountAssetExecutorTest, InvalidDifferentDomain) {
+      addPerms({shared_model::interface::permissions::Role::kGetDomainAccAst});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
-                       .getAccountAssets(account->accountId())
+                       .getAccountAssets(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
       ASSERT_TRUE(boost::apply_visitor(
           shared_model::interface::QueryErrorResponseChecker<
               shared_model::interface::StatefulFailedErrorResponse>(),
           result->get()));
+    }
+
+    /**
+     * @given initialized storage, permission
+     * @when get account assets of non existing account
+     * @then Return error
+     */
+    TEST_F(GetAccountAssetExecutorTest, InvalidNoAccount) {
+      addPerms({shared_model::interface::permissions::Role::kGetAllAccAst});
+      auto query = TestQueryBuilder()
+                       .creatorAccountId(account->accountId())
+                       .getAccountAssets("some@domain")
+                       .build();
+      auto result = executeQuery(query);
+      ASSERT_TRUE(boost::apply_visitor(
+          shared_model::interface::QueryErrorResponseChecker<
+              shared_model::interface::NoAccountAssetsErrorResponse>(),
+          result->get()))
+          << result->toString();
     }
 
     class GetAccountDetailExecutorTest : public QueryExecutorTest {
@@ -560,8 +659,12 @@ namespace iroha {
       std::unique_ptr<shared_model::interface::Account> account2;
     };
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestValidMyAccount) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get account detail
+     * @then Return account detail
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -578,8 +681,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestValidAllAccounts) {
+    /**
+     * @given initialized storage, global permission
+     * @when get account detail of other user
+     * @then Return account detail
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -596,8 +703,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestValidDomainAccount) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account detail of other user in the same domain
+     * @then Return account detail
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidDomainAccount) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetDomainAccDetail});
       auto query = TestQueryBuilder()
@@ -615,10 +726,17 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountDetailExecutorTest, GetAccountDetailExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account detail of other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetAccountDetailExecutorTest, InvalidDifferentDomain) {
+      addPerms(
+          {shared_model::interface::permissions::Role::kGetDomainAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
-                       .getAccountDetail(account2->accountId())
+                       .getAccountDetail(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
       ASSERT_TRUE(boost::apply_visitor(
@@ -627,8 +745,12 @@ namespace iroha {
           result->get()));
     }
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestInvalidNoAccount) {
+    /**
+     * @given initialized storage, permission
+     * @when get account detail of non existing account
+     * @then Return error
+     */
+    TEST_F(GetAccountDetailExecutorTest, InvalidNoAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -641,7 +763,14 @@ namespace iroha {
           result->get()));
     }
 
-    TEST_F(GetAccountDetailExecutorTest, GetAccountDetailExecutorTestValidKey) {
+    /**
+     * @given details, inserted into one account by two writers, with one of the
+     * keys repeated
+     * @when performing query to retrieve details under this key
+     * @then getAccountDetail will return details from both writers under the
+     * specified key
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidKey) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -655,13 +784,18 @@ namespace iroha {
             result->get());
 
         ASSERT_EQ(cast_resp.detail(),
-                  "{ \"id@domain\" : {\"key\" : \"value\"}, \"id2@domain\" : "
-                  "{\"key\" : \"value\"} }");
+                  R"({ "id@domain" : {"key" : "value"}, )"
+                  R"("id2@domain" : {"key" : "value"} })");
       });
     }
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestValidWriter) {
+    /**
+     * @given details, inserted into one account by two writers
+     * @when performing query to retrieve details, added by one of the writers
+     * @then getAccountDetail will return only details, added by the specified
+     * writer
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidWriter) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccDetail});
       auto query =
           TestQueryBuilder()
@@ -675,14 +809,20 @@ namespace iroha {
                 shared_model::interface::AccountDetailResponse>(),
             result->get());
 
-        ASSERT_EQ(
-            cast_resp.detail(),
-            "{\"id@domain\" : {\"key\": \"value\", \"key2\": \"value2\"}}");
+        ASSERT_EQ(cast_resp.detail(),
+                  R"({"id@domain" : {"key": "value", "key2": "value2"}})");
       });
     }
 
-    TEST_F(GetAccountDetailExecutorTest,
-           GetAccountDetailExecutorTestValidKeyWriter) {
+    /**
+     * @given details, inserted into one account by two writers, with one of the
+     * keys repeated
+     * @when performing query to retrieve details under this key and added by
+     * one of the writers
+     * @then getAccountDetail will return only details, which are under the
+     * specified key and added by the specified writer
+     */
+    TEST_F(GetAccountDetailExecutorTest, ValidKeyWriter) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccDetail});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -697,7 +837,7 @@ namespace iroha {
             result->get());
 
         ASSERT_EQ(cast_resp.detail(),
-                  "{\"id@domain\" : {\"key\" : \"value\"}}");
+                  R"({"id@domain" : {"key" : "value"}})");
       });
     }
 
@@ -708,7 +848,12 @@ namespace iroha {
       }
     };
 
-    TEST_F(GetRolesExecutorTest, GetRolesExecutorTestValid) {
+    /**
+     * @given initialized storage, permission to read all roles
+     * @when get system roles
+     * @then Return roles
+     */
+    TEST_F(GetRolesExecutorTest, Valid) {
       addPerms({shared_model::interface::permissions::Role::kGetRoles});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -727,7 +872,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetRolesExecutorTest, GetRolesExecutorTestInvalid) {
+    /**
+     * @given initialized storage, no permission to read all roles
+     * @when get system roles
+     * @then Return Error
+     */
+    TEST_F(GetRolesExecutorTest, Invalid) {
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
                        .getRoles()
@@ -746,7 +896,12 @@ namespace iroha {
       }
     };
 
-    TEST_F(GetRolePermsExecutorTest, GetRolePermsExecutorTestValid) {
+    /**
+     * @given initialized storage, permission to read all roles
+     * @when get role permissions
+     * @then Return role permissions
+     */
+    TEST_F(GetRolePermsExecutorTest, Valid) {
       addPerms({shared_model::interface::permissions::Role::kGetRoles});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -764,7 +919,13 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetRolePermsExecutorTest, GetRolePermsExecutorTestInvalidNoRole) {
+    /**
+     * @given initialized storage, permission to read all roles, role does not
+     * exist
+     * @when get role permissions
+     * @then Return error
+     */
+    TEST_F(GetRolePermsExecutorTest, InvalidNoRole) {
       addPerms({shared_model::interface::permissions::Role::kGetRoles});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -777,7 +938,12 @@ namespace iroha {
           result->get()));
     }
 
-    TEST_F(GetRolePermsExecutorTest, GetRolePermsExecutorTestInvalid) {
+    /**
+     * @given initialized storage, no permission to read all roles
+     * @when get role permissions
+     * @then Return error
+     */
+    TEST_F(GetRolePermsExecutorTest, Invalid) {
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
                        .getRolePermissions("role")
@@ -804,7 +970,12 @@ namespace iroha {
       const std::string asset_id = "coin#domain";
     };
 
-    TEST_F(GetAssetInfoExecutorTest, GetAssetInfoExecutorTestValid) {
+    /**
+     * @given initialized storage, permission to read all system assets
+     * @when get asset info
+     * @then Return asset
+     */
+    TEST_F(GetAssetInfoExecutorTest, Valid) {
       addPerms({shared_model::interface::permissions::Role::kReadAssets});
       createAsset();
       auto query = TestQueryBuilder()
@@ -824,7 +995,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAssetInfoExecutorTest, GetAssetInfoExecutorTestInvalidNoAsset) {
+    /**
+     * @given initialized storage, all permissions
+     * @when get asset info of non existing asset
+     * @then Error
+     */
+    TEST_F(GetAssetInfoExecutorTest, InvalidNoAsset) {
       addPerms({shared_model::interface::permissions::Role::kReadAssets});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
@@ -837,7 +1013,12 @@ namespace iroha {
           result->get()));
     }
 
-    TEST_F(GetAssetInfoExecutorTest, GetAssetInfoExecutorTestInvalid) {
+    /**
+     * @given initialized storage, no permissions
+     * @when get asset info
+     * @then Error
+     */
+    TEST_F(GetAssetInfoExecutorTest, Invalid) {
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
                        .getAssetInfo(asset_id)
@@ -979,8 +1160,12 @@ namespace iroha {
     class GetAccountTransactionsExecutorTest
         : public GetTransactionsExecutorTest {};
 
-    TEST_F(GetAccountTransactionsExecutorTest,
-           GetAccountTransactionsExecutorTestValidMyAcc) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get account transactions
+     * @then Return account transactions of user
+     */
+    TEST_F(GetAccountTransactionsExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyAccTxs});
 
       commitBlocks();
@@ -1002,8 +1187,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountTransactionsExecutorTest,
-           GetAccountTransactionsExecutorTestValidAllAcc) {
+    /**
+     * @given initialized storage, global permission
+     * @when get account transactions of other user
+     * @then Return account transactions
+     */
+    TEST_F(GetAccountTransactionsExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccTxs});
 
       commitBlocks();
@@ -1025,8 +1214,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountTransactionsExecutorTest,
-           GetAccountTransactionsExecutorTestValidDomainAcc) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account transactions of other user in the same domain
+     * @then Return account transactions
+     */
+    TEST_F(GetAccountTransactionsExecutorTest, ValidDomainAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetDomainAccTxs});
 
       commitBlocks();
@@ -1048,11 +1241,16 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountTransactionsExecutorTest,
-           GetAccountTransactionsExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account transactions of other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetAccountTransactionsExecutorTest, InvalidDifferentDomain) {
+      addPerms({shared_model::interface::permissions::Role::kGetDomainAccTxs});
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
-                       .getAccountTransactions(account->accountId())
+                       .getAccountTransactions(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
       ASSERT_TRUE(boost::apply_visitor(
@@ -1061,18 +1259,42 @@ namespace iroha {
           result->get()));
     }
 
+    /**
+     * @given initialized storage, permission
+     * @when get account transactions of non existing account
+     * @then Return empty account transactions
+     */
+    TEST_F(GetAccountTransactionsExecutorTest, NoAccount) {
+      addPerms({shared_model::interface::permissions::Role::kGetAllAccTxs});
+
+      auto query = TestQueryBuilder()
+                       .creatorAccountId(account->accountId())
+                       .getAccountTransactions("some@domain")
+                       .build();
+      auto result = executeQuery(query);
+      ASSERT_NO_THROW({
+        const auto &cast_resp = boost::apply_visitor(
+            framework::SpecifiedVisitor<
+                shared_model::interface::TransactionsResponse>(),
+            result->get());
+        ASSERT_EQ(cast_resp.transactions().size(), 0);
+      });
+    }
+
     class GetTransactionsHashExecutorTest : public GetTransactionsExecutorTest {
     };
 
-    TEST_F(GetTransactionsHashExecutorTest,
-           GetTransactionsHashExecutorTestValidAllAcc) {
+    /**
+     * @given initialized storage, global permission
+     * @when get transactions of other user
+     * @then Return transactions
+     */
+    TEST_F(GetTransactionsHashExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllTxs});
 
       commitBlocks();
 
-      std::vector<decltype(hash1)> hashes;
-      hashes.push_back(hash1);
-      hashes.push_back(hash2);
+      std::vector<decltype(hash3)> hashes;
       hashes.push_back(hash3);
 
       auto query = TestQueryBuilder()
@@ -1085,15 +1307,17 @@ namespace iroha {
             framework::SpecifiedVisitor<
                 shared_model::interface::TransactionsResponse>(),
             result->get());
-        ASSERT_EQ(cast_resp.transactions().size(), 3);
-        ASSERT_EQ(cast_resp.transactions()[0].hash(), hash1);
-        ASSERT_EQ(cast_resp.transactions()[1].hash(), hash2);
-        ASSERT_EQ(cast_resp.transactions()[2].hash(), hash3);
+        ASSERT_EQ(cast_resp.transactions().size(), 1);
+        ASSERT_EQ(cast_resp.transactions()[0].hash(), hash3);
       });
     }
 
-    TEST_F(GetTransactionsHashExecutorTest,
-           GetTransactionsHashExecutorTestValidMyAcc) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get transactions
+     * @then Return transactions of user
+     */
+    TEST_F(GetTransactionsHashExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyTxs});
 
       commitBlocks();
@@ -1122,8 +1346,12 @@ namespace iroha {
     class GetAccountAssetTransactionsExecutorTest
         : public GetTransactionsExecutorTest {};
 
-    TEST_F(GetAccountAssetTransactionsExecutorTest,
-           GetAccountAssetTransactionsExecutorTestValidMyAcc) {
+    /**
+     * @given initialized storage, permission to his/her account
+     * @when get account asset transactions
+     * @then Return account asset transactions of user
+     */
+    TEST_F(GetAccountAssetTransactionsExecutorTest, ValidMyAccount) {
       addPerms({shared_model::interface::permissions::Role::kGetMyAccAstTxs});
 
       commitBlocks();
@@ -1145,8 +1373,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetTransactionsExecutorTest,
-           GetAccountAssetTransactionsExecutorTestValidAllAcc) {
+    /**
+     * @given initialized storage, global permission
+     * @when get account asset transactions of other user
+     * @then Return account asset transactions
+     */
+    TEST_F(GetAccountAssetTransactionsExecutorTest, ValidAllAccounts) {
       addPerms({shared_model::interface::permissions::Role::kGetAllAccAstTxs});
 
       commitBlocks();
@@ -1168,8 +1400,12 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetTransactionsExecutorTest,
-           GetAccountAssetTransactionsExecutorTestValidDomainAcc) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account asset transactions of other user in the same domain
+     * @then Return account asset transactions
+     */
+    TEST_F(GetAccountAssetTransactionsExecutorTest, ValidDomainAccount) {
       addPerms(
           {shared_model::interface::permissions::Role::kGetDomainAccAstTxs});
 
@@ -1192,11 +1428,18 @@ namespace iroha {
       });
     }
 
-    TEST_F(GetAccountAssetTransactionsExecutorTest,
-           GetAccountAssetTransactionsExecutorTestInvalid) {
+    /**
+     * @given initialized storage, domain permission
+     * @when get account asset transactions of other user in the other domain
+     * @then Return error
+     */
+    TEST_F(GetAccountAssetTransactionsExecutorTest, InvalidDifferentDomain) {
+      addPerms(
+          {shared_model::interface::permissions::Role::kGetDomainAccAstTxs});
+
       auto query = TestQueryBuilder()
                        .creatorAccountId(account->accountId())
-                       .getAccountTransactions(account->accountId())
+                       .getAccountTransactions(another_account->accountId())
                        .build();
       auto result = executeQuery(query);
       ASSERT_TRUE(boost::apply_visitor(
@@ -1204,5 +1447,24 @@ namespace iroha {
               shared_model::interface::StatefulFailedErrorResponse>(),
           result->get()));
     }
+
+    /**
+     * @given initialized storage
+     * @when get pending transactions
+     * @then pending txs storage will be requested for query creator account
+     */
+    TEST_F(QueryExecutorTest, TransactionsStorageIsAccessed) {
+      auto query = TestQueryBuilder()
+                       .creatorAccountId(account->accountId())
+                       .getPendingTransactions()
+                       .build();
+
+      EXPECT_CALL(*pending_txs_storage,
+                  getPendingTransactions(account->accountId()))
+          .Times(1);
+
+      executeQuery(query);
+    }
+
   }  // namespace ametsuchi
 }  // namespace iroha
