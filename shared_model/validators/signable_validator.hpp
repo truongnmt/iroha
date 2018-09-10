@@ -42,7 +42,7 @@ namespace shared_model {
       }
 
       Answer validate(const Model &model) const {
-        return validateImpl(model, [this](const auto &model) {
+        return validateImpl(model, [&](const auto &model) {
           return ModelValidator::validate(model);
         });
       }
