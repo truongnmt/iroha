@@ -122,8 +122,6 @@ namespace iroha {
 
       mst_processor_->onPreparedBatches().subscribe([this](auto &&batch) {
         log_->info("MST batch prepared");
-        // TODO: 07/08/2018 @muratovv rework interface of pcs::propagate batch
-        // and mst::propagate batch IR-1584
         this->pcs_->propagate_batch(batch);
       });
       mst_processor_->onExpiredBatches().subscribe([this](auto &&batch) {

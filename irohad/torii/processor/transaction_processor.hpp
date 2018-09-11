@@ -39,7 +39,7 @@ namespace iroha {
      public:
       /**
        * Process batch and propagate it to the MST or PCS
-       * @param transaction_sequence - transaction sequence for processing
+       * @param transaction_batch - transaction sequence for processing
        */
       virtual void batchHandle(
           std::shared_ptr<shared_model::interface::TransactionBatch>
