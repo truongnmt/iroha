@@ -124,10 +124,10 @@ namespace iroha {
       log_->info("handle batch");
       if (transaction_batch->hasAllSignatures()) {
         log_->info("propagating batch to PCS");
-        this->publishEnoughSignaturesStatus(transaction_batch.transactions());
+        this->publishEnoughSignaturesStatus(transaction_batch->transactions());
         pcs_->propagate_batch(transaction_batch);
       } else {
-        for (const auto &tx : transaction_batch.transactions()) {
+        for (const auto &tx : transaction_batch->transactions()) {
           this->publishStatus(TxStatusType::kMstPending, tx->hash());
         }
         log_->info("propagating batch to MST");

@@ -58,10 +58,10 @@ void OnDemandOrderingGate::propagateTransaction(
 }
 
 void OnDemandOrderingGate::propagateBatch(
-    const shared_model::interface::TransactionBatch &batch) const {
+    std::shared_ptr<shared_model::interface::TransactionBatch> batch) const {
   std::shared_lock<std::shared_timed_mutex> lock(mutex_);
 
-  network_client_->onTransactions(current_round_, batch.transactions());
+  network_client_->onTransactions(current_round_, batch->transactions());
 }
 
 rxcpp::observable<std::shared_ptr<shared_model::interface::Proposal>>
