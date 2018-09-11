@@ -19,7 +19,8 @@
 
 #include "execution/query_execution_impl.hpp"
 #include "main/server_runner.hpp"
-#include "torii/command_service.hpp"
+#include "torii/impl/command_service_impl.hpp"
+#include "torii/impl/command_service_transport_grpc.hpp"
 #include "torii/impl/status_bus_impl.hpp"
 #include "torii/processor/query_processor_impl.hpp"
 #include "torii/processor/transaction_processor_impl.hpp"
@@ -110,11 +111,11 @@ class ClientServerTest : public testing::Test {
 
     //----------- Server run ----------------
     runner
-        ->append(std::make_unique<torii::CommandService>(tx_processor,
-                                                         storage,
-                                                         status_bus,
-                                                         initial_timeout,
-                                                         nonfinal_timeout))
+        ->append(std::make_unique<torii::CommandServiceTransportGrpc>(
+            std::make_shared<torii::CommandServiceImpl>(
+                tx_processor, storage, status_bus),
+            initial_timeout,
+            nonfinal_timeout))
         .append(std::make_unique<torii::QueryService>(qpi))
         .run()
         .match(
