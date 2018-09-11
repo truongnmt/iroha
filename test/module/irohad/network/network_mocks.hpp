@@ -64,10 +64,11 @@ namespace iroha {
           retrieveBlocks,
           rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>(
               const shared_model::crypto::PublicKey &));
-      MOCK_METHOD2(retrieveBlock,
-                   boost::optional<shared_model::interface::BlockVariant>(
-                       const shared_model::crypto::PublicKey &,
-                       const shared_model::interface::types::HashType &));
+      MOCK_METHOD2(
+          retrieveBlock,
+          boost::optional<std::shared_ptr<shared_model::interface::Block>>(
+              const shared_model::crypto::PublicKey &,
+              const shared_model::interface::types::HashType &));
     };
 
     class MockOrderingGate : public OrderingGate {
@@ -90,11 +91,13 @@ namespace iroha {
 
     class MockConsensusGate : public ConsensusGate {
      public:
-      MOCK_METHOD1(vote, void(const shared_model::interface::BlockVariant &));
+      MOCK_METHOD1(vote, void(std::shared_ptr<shared_model::interface::Block>));
 
-      MOCK_METHOD0(on_commit,
-                   rxcpp::observable<shared_model::interface::BlockVariant>());
+      MOCK_METHOD0(
+          on_commit,
+          rxcpp::observable<std::shared_ptr<shared_model::interface::Block>>());
     };
+
   }  // namespace network
 }  // namespace iroha
 
