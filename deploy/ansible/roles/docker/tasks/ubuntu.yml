@@ -1,9 +1,9 @@
 ---
   - name: install python 2
     raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
-    
+
   - name: Purge old Docker versions if any
-    apt: purge=yes state=absent name={{ item }} 
+    apt: purge=yes state=absent name={{ item }}
     with_items:
       - docker
       - docker-engine
@@ -26,9 +26,9 @@
     shell: 'add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
 
   - name: Install docker
-    apt: 
-      name: docker-ce={{ dockerVersion }}
-      state: present
+    apt:
+      name: docker-ce
+      # state: present
       update_cache: yes
 
 # purge if anything installed to resolve conflicts

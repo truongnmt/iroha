@@ -19,7 +19,7 @@
   - name: generate configs
     template:
       src: config.j2
-      dest: "{{ confPath }}{{ item }}/config.sample"
+      dest: "{{ confPath }}{{ item }}/config.docker"
     with_sequence: start=0 end={{ nodes_in_region - 1 | int }}
     tag: deliver
 
