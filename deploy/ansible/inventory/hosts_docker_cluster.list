@@ -15,14 +15,14 @@
 # NOTE: 2) you can set unique value of "nodes_in_group" for each host by setting it in
 # playbook/<playbook name>/host_vars/<host name>/all.yml
 
-[iroha-east]
-iroha-bench1 ansible_host=0.0.0.0 ansible_user=root key=0
+# [iroha-east-asia]
+# iroha-bench2 ansible_host=65.52.164.195 ansible_user=azure key=5
 
-[iroha-west]
-iroha-bench2 ansible_host=0.0.0.0 ansible_user=root key=8
+# [iroha-south]
+# iroha-bench3 ansible_host=0.0.0.0 ansible_user=root key=13
 
-[iroha-south]
-iroha-bench3 ansible_host=0.0.0.0 ansible_user=root key=13
+# [iroha-north]
+# iroha-bench4 ansible_host=0.0.0.0 ansible_user=root key=17
 
-[iroha-north]
-iroha-bench4 ansible_host=0.0.0.0 ansible_user=root key=17
+[iroha-sea]
+iroha-bench1 ansible_host=13.231.193.66 ansible_user=ubuntu key=0
